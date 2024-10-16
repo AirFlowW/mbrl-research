@@ -1,0 +1,78 @@
+# Exapmle config how PETS runs with 
+
+Use OmegaConf.to_yaml(cfg)
+
+  warnings.warn(
+seed: 0
+device: cpu
+log_frequency_agent: 1000
+save_video: false
+debug_mode: false
+logger: wandb
+wandb_project: mbrl-research
+experiment: default
+root_dir: ./exp
+algorithm:
+  name: pets
+  agent:
+    _target_: mbrl.planning.TrajectoryOptimizerAgent
+    action_lb: ???
+    action_ub: ???
+    planning_horizon: ${overrides.planning_horizon}
+    optimizer_cfg: ${action_optimizer}
+    replan_freq: 1
+    verbose: ${debug_mode}
+  normalize: true
+  normalize_double_precision: true
+  target_is_delta: true
+  initial_exploration_steps: ${overrides.trial_length}
+  freq_train_model: ${overrides.freq_train_model}
+  learned_rewards: ${overrides.learned_rewards}
+  num_particles: 20
+dynamics_model:
+  _target_: mbrl.models.GaussianMLP
+  device: ${device}
+  num_layers: 4
+  in_size: ???
+  out_size: ???
+  ensemble_size: 7
+  hid_size: 200
+  deterministic: false
+  propagation_method: random_model
+  learn_logvar_bounds: false
+  activation_fn_cfg:
+    _target_: torch.nn.SiLU
+overrides:
+  env: pets_halfcheetah
+  term_fn: no_termination
+  obs_process_fn: mbrl.env.pets_halfcheetah.HalfCheetahEnv.preprocess_fn
+  learned_rewards: false
+  num_steps: 300000
+  trial_length: 1000
+  num_elites: 5
+  model_lr: 0.00028
+  model_wd: 0.0001
+  model_batch_size: 32
+  validation_ratio: 0
+  no_delta_list:
+  - 0
+  freq_train_model: 1000
+  patience: 12
+  num_epochs_train_model: 12
+  planning_horizon: 30
+  cem_num_iters: 5
+  cem_elite_ratio: 0.16
+  cem_population_size: 400
+  cem_alpha: 0.12
+  cem_clipped_normal: false
+action_optimizer:
+  _target_: mbrl.planning.CEMOptimizer
+  num_iterations: ${overrides.cem_num_iters}
+  elite_ratio: ${overrides.cem_elite_ratio}
+  population_size: ${overrides.cem_population_size}
+  alpha: ${overrides.cem_alpha}
+  lower_bound: ???
+  upper_bound: ???
+  return_mean_elites: true
+  device: ${device}
+  clipped_normal: ${overrides.cem_clipped_normal}
