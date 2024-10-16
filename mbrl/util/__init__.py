@@ -7,6 +7,7 @@ from typing import Dict, Union
 import omegaconf
 
 from .logger import Logger
+from .wandb_logger import WANDBLogger
 from .replay_buffer import (
     ReplayBuffer,
     SequenceTransitionIterator,

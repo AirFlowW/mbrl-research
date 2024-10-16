@@ -7,6 +7,7 @@ exp/
 notebooks/.ipynb_checkpoints
 _build
 __pycache__
+wandb/
 
 # Distribution / packaging
 .Python
@@ -26,3 +27,6 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# MacOS
+.DS_Store

@@ -165,7 +165,7 @@ class Logger(object):
     def log_param(self, *_args):
         pass
 
-    def log_data(self, group_name: str, data: Mapping[str, LogTypes]):
+    def log_data(self, group_name: str, data: Mapping[str, LogTypes], dump: bool = True):
         """Logs the data contained in a given dictionary to the given logging group.
 
         Args:
@@ -183,7 +183,8 @@ class Logger(object):
             meter_group.log(key, value)
         self._group_steps[group_name] += 1
         if self._group_steps[group_name] % dump_frequency == 0:
-            self._dump(group_name)
+            if dump:
+                self._dump(group_name)
 
     def _dump(self, group_name: str, save: bool = True):
         if group_name not in self._groups:
