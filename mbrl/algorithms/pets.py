@@ -47,7 +47,7 @@ def train(
         logger = None
     else:
         if cfg.logger == "wandb":
-            logger = mbrl.util.WANDBLogger(work_dir)
+            logger = mbrl.util.WANDBLogger(work_dir, cfg=cfg)
         else:
             logger = mbrl.util.Logger(work_dir)
         logger.register_group(
