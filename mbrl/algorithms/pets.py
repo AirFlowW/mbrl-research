@@ -53,6 +53,9 @@ def train(
         logger.register_group(
             mbrl.constants.RESULTS_LOG_NAME, EVAL_LOG_FORMAT, color="green"
         )
+        logger.register_group(
+            mbrl.constants.STEP_LOG_NAME, mbrl.constants.STEP_LOG_FORMAT, color="yellow"
+        )
 
     # -------- Create and populate initial env dataset --------
     dynamics_model = mbrl.util.common.create_one_dim_tr_model(cfg, obs_shape, act_shape)
@@ -131,15 +134,19 @@ def train(
             steps_trial += 1
             env_steps += 1
 
-            if debug_mode:
-                print(f"Step {env_steps}: Reward {reward:.3f}.")
+            if logger is not None:
+                logger.log_data(
+                    mbrl.constants.STEP_LOG_NAME,
+                    {"env_step": env_steps, "step_reward": reward},
+                )
 
+        current_trial += 1
         if logger is not None:
             logger.log_data(
                 mbrl.constants.RESULTS_LOG_NAME,
-                {"env_step": env_steps, "episode_reward": total_reward},
+                {"episode":current_trial, "env_step": env_steps, "episode_reward": total_reward, "episode_length": steps_trial},
             )
-        current_trial += 1
+        
         if debug_mode:
             print(f"Trial: {current_trial }, reward: {total_reward}.")
 

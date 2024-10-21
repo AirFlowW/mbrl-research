@@ -5,6 +5,15 @@
 RESULTS_LOG_NAME = "results"
 
 EVAL_LOG_FORMAT = [
-    ("env_step", "S", "int"),
+    ("episode", "E", "int"),
+    ("env_step", "GS", "int"),
+    ("episode_length", "L", "int"),
     ("episode_reward", "R", "float"),
+]
+
+STEP_LOG_NAME = "step"
+
+STEP_LOG_FORMAT = [
+    ("env_step", "GS", "int"),
+    ("step_reward", "R", "float"),
 ]
