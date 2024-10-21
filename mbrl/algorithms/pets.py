@@ -12,6 +12,7 @@ import torch
 
 import mbrl.constants
 import mbrl.models
+from mbrl.models.vbll_mlp import VBLLMLP
 import mbrl.planning
 import mbrl.types
 import mbrl.util
@@ -110,6 +111,8 @@ def train(
         while not terminated and not truncated:
             # --------------- Model Training -----------------
             if env_steps % cfg.algorithm.freq_train_model == 0:
+                if isinstance(dynamics_model, VBLLMLP):
+                    dynamics_model.update_regularization_weight_from_dataset_length(replay_buffer.num_stored)
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
                     model_trainer,
