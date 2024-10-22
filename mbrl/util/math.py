@@ -106,6 +106,8 @@ class Normalizer:
     _STATS_FNAME = "env_stats.pickle"
 
     def __init__(self, in_size: int, device: torch.device, dtype=torch.float32):
+        if device == 'mps' or device == torch.device('mps'):
+            dtype = torch.float32
         self.mean = torch.zeros((1, in_size), device=device, dtype=dtype)
         self.std = torch.ones((1, in_size), device=device, dtype=dtype)
         self.eps = 1e-12 if dtype == torch.double else 1e-5
@@ -121,7 +123,10 @@ class Normalizer:
         """
         assert data.ndim == 2 and data.shape[1] == self.mean.shape[1]
         if isinstance(data, np.ndarray):
-            data = torch.from_numpy(data).to(self.device)
+            if self.device == 'mps' or torch.device('mps'):
+                data = torch.from_numpy(data.astype(np.float32)).to(self.device)
+            else:
+                data = torch.from_numpy(data).to(self.device)
         self.mean = data.mean(0, keepdim=True)
         self.std = data.std(0, keepdim=True)
         self.std[self.std < self.eps] = 1.0
