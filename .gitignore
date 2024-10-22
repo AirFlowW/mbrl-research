@@ -8,6 +8,7 @@ notebooks/.ipynb_checkpoints
 _build
 __pycache__
 wandb/
+not_in_git/
 
 # Distribution / packaging
 .Python
