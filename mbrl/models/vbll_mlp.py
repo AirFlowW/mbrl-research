@@ -18,33 +18,10 @@ from .util import truncated_normal_init
 
 
 class VBLLMLP(Model):
-    """Implements a Gaussian MLP model with Variational Bayesian Last Layer.
+    """Implements a MLP model with Variational Bayesian Last Layer.
 
     This model is based on the
     2024 paper (VBLL) https://arxiv.org/abs/2404.11599v1
-
-    It predicts per output mean and softplus variance. The variance is bounded between learned ``min_var``
-    and ``max_var`` parameters.
-
-    This class can also be used to build an ensemble of GaussianMLP models, by setting
-    ``ensemble_size > 1`` in the constructor. Then, a single forward pass can be used to evaluate
-    multiple independent MLPs at the same time. When this mode is active, the constructor will
-    set ``self.num_members = ensemble_size``.
-
-    For the ensemble variant, uncertainty propagation methods are available that can be used
-    to aggregate the outputs of the different models in the ensemble.
-    Valid propagation options are:
-
-            - "random_model": for each output in the batch a model will be chosen at random.
-              This corresponds to TS1 propagation in the PETS paper.
-            - "fixed_model": for output j-th in the batch, the model will be chosen according to
-              the model index in `propagation_indices[j]`. This can be used to implement TSinf
-              propagation, described in the PETS paper.
-            - "expectation": the output for each element in the batch will be the mean across
-              models.
-
-    The default value of ``None`` indicates that no uncertainty propagation, and the forward
-    method returns all outputs of all models.
 
     Args:
         in_size (int): size of model input.
@@ -53,16 +30,18 @@ class VBLLMLP(Model):
         num_layers (int): the number of layers in the model
                           (e.g., if ``num_layers == 3``, then model graph looks like
                           input -h1-> -h2-> -l3-> output).
-        ensemble_size (int): the number of members in the ensemble. Defaults to 1.
         hid_size (int): the size of the hidden layers (e.g., size of h1 and h2 in the graph above).
         deterministic (bool): if ``True``, the model will be trained using MSE loss and no
             logvar prediction will be done. Defaults to ``False``.
-        propagation_method (str, optional): the uncertainty propagation method to use (see
-            above). Defaults to ``None``.
-        learn_logvar_bounds (bool): if ``True``, the logvar bounds will be learned, otherwise
-            they will be constant. Defaults to ``False``.
         activation_fn_cfg (dict or omegaconf.DictConfig, optional): configuration of the
             desired activation function. Defaults to torch.nn.ELU when ``None``.
+        regularization_weight_factor (int): the factor k to multiply the regularization weight by.
+            Regularization weight is set to k/dataset_length and used in ELBO term.
+        parameterization (str): Parameterization of covariance matrix.
+            Currently supports {'dense', 'diagonal', 'lowrank', 'dense_precision'}.
+        cov_rank (int, optional): the rank of the covariance matrix.
+        prior_scale (float): Scale of prior covariance matrix.
+        wishart_scale (float): Scale of Wishart prior on noise covariance.
     """
 
     def __init__(
