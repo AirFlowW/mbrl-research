@@ -152,9 +152,6 @@ def train(
                 {"episode":current_trial, "env_step": env_steps, "episode_reward": total_reward, "episode_length": steps_trial},
             )
         
-        if debug_mode:
-            print(f"Trial: {current_trial }, reward: {total_reward}.")
-
         max_total_reward = max(max_total_reward, total_reward)
 
     return np.float32(max_total_reward)
