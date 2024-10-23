@@ -4,7 +4,7 @@ learned_rewards: false
 trial_length: 200
 num_steps: 2000
 
-num_elites: 1
+num_elites: 5
 model_lr: 7.5e-4
 model_wd: 3e-5
 model_batch_size: 256
