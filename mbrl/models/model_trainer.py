@@ -180,7 +180,7 @@ class ModelTrainer:
                 self.logger.log_data(
                     self._LOG_GROUP_NAME,
                     {
-                        "iteration": self._train_iteration,
+                        "train_iteration": self._train_iteration,
                         "epoch": epoch,
                         "train_dataset_size": dataset_train.num_stored,
                         "val_dataset_size": dataset_val.num_stored
