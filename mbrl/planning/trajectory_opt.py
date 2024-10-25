@@ -10,6 +10,7 @@ import numpy as np
 import omegaconf
 import torch
 import torch.distributions
+import mbrl.util.time_keeping as time_keeping
 
 import mbrl.models
 import mbrl.types
@@ -691,6 +692,7 @@ class TrajectoryOptimizerAgent(Agent):
 
         if self.verbose:
             print(f"Planning time: {plan_time:.3f}")
+        time_keeping.last_planning_time = plan_time
         return action
 
     def plan(self, obs: np.ndarray, **_kwargs) -> np.ndarray:

@@ -3,12 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
+import time
 from typing import Optional
 
 import gymnasium as gym
 import numpy as np
 import omegaconf
 import torch
+import wandb
 
 import mbrl.constants
 import mbrl.models
@@ -17,6 +19,7 @@ from mbrl.models.basic_ensemble import BasicEnsemble
 import mbrl.planning
 import mbrl.types
 import mbrl.util
+from mbrl.util import time_keeping
 import mbrl.util.common
 import mbrl.util.math
 
@@ -32,6 +35,7 @@ def train(
     work_dir: Optional[str] = None,
 ) -> np.float32:
     # ------------------- Initialization -------------------
+    start_overall_runtime = time.time()
     debug_mode = cfg.get("debug_mode", False)
 
     obs_shape = env.observation_space.shape
@@ -115,6 +119,7 @@ def train(
                 if isinstance(dynamics_model, BasicEnsemble) and isinstance(dynamics_model.members[0], VBLLMLP):
                     for member in dynamics_model.members:
                         member.update_regularization_weight_from_dataset_length(replay_buffer.num_stored)
+                start_time = time.time()
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
                     model_trainer,
@@ -122,6 +127,8 @@ def train(
                     replay_buffer,
                     work_dir=work_dir,
                 )
+                train_time = time.time() - start_time
+                wandb.log({"model_train/train_time": train_time})
 
             # --- Doing env step using the agent and adding to model dataset ---
             (
@@ -142,7 +149,7 @@ def train(
             if logger is not None:
                 logger.log_data(
                     mbrl.constants.STEP_LOG_NAME,
-                    {"env_step": env_steps, "step_reward": reward},
+                    {"env_step": env_steps, "planning_time": time_keeping.last_planning_time, "step_reward": reward},
                 )
 
         current_trial += 1
@@ -153,5 +160,6 @@ def train(
             )
         
         max_total_reward = max(max_total_reward, total_reward)
-
+    overall_runtime = time.time() - start_overall_runtime
+    wandb.log({f"{mbrl.constants.RESULTS_LOG_NAME}/overall_runtime": overall_runtime})
     return np.float32(max_total_reward)

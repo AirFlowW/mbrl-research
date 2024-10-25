@@ -15,5 +15,6 @@ STEP_LOG_NAME = "step"
 
 STEP_LOG_FORMAT = [
     ("env_step", "GS", "int"),
+    ("planning_time", "PT", "float"),
     ("step_reward", "R", "float"),
 ]
