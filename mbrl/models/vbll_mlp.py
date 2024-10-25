@@ -31,6 +31,7 @@ class VBLLMLP(Model):
                           (e.g., if ``num_layers == 3``, then model graph looks like
                           input -h1-> -h2-> -l3-> output).
         hid_size (int): the size of the hidden layers (e.g., size of h1 and h2 in the graph above).
+        feature_dim (int): the size of the feature representation (e.g., size of l3 in the graph above).
         deterministic (bool): if ``True``, the model will be trained using MSE loss and no
             logvar prediction will be done. Defaults to ``False``.
         activation_fn_cfg (dict or omegaconf.DictConfig, optional): configuration of the
@@ -51,6 +52,7 @@ class VBLLMLP(Model):
         device: Union[str, torch.device],
         num_layers: int = 4,
         hid_size: int = 200,
+        feature_dim: int = 200,
         deterministic: bool = False,
         activation_fn_cfg: Optional[Union[Dict, omegaconf.DictConfig]] = None,
         regularization_weight_factor: int = 1,
@@ -75,14 +77,17 @@ class VBLLMLP(Model):
                 activation_func = hydra.utils.instantiate(cfg)
             return activation_func
 
+        if num_layers < 2:
+            raise ValueError("Number of layers must be at least 2.")
         hidden_layers = [nn.Sequential(nn.Linear(in_size, hid_size), create_activation())]
-        for i in range(num_layers - 1):
+        for i in range(num_layers - 2):
             hidden_layers.append(nn.Sequential(nn.Linear(hid_size, hid_size), create_activation()))
+        hidden_layers.append(nn.Sequential(nn.Linear(hid_size, feature_dim), create_activation()))
 
         self.feature_extractor = nn.Sequential(*hidden_layers)
 
         # define output layer
-        self.out_layer = vbll.Regression(hid_size, out_size, regularization_weight=regularization_weight_factor, parameterization=parameterization, 
+        self.out_layer = vbll.Regression(feature_dim, out_size, regularization_weight=regularization_weight_factor, parameterization=parameterization, 
             cov_rank=cov_rank, prior_scale = prior_scale, wishart_scale = wishart_scale)
 
         self.apply(truncated_normal_init)

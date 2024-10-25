@@ -14,7 +14,8 @@ member_cfg:
     _target_: torch.nn.ELU
 
   num_layers: 4
-  hid_size: 50
+  hid_size: 200
+  feature_dim: 50
   regularization_weight_factor: 1
   parameterization: "dense" 
   cov_rank: 1 
