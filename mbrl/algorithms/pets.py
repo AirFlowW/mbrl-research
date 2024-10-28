@@ -112,10 +112,10 @@ def train(
         while not terminated and not truncated:
             # --------------- Model Training -----------------
             if env_steps % cfg.algorithm.freq_train_model == 0:
-                if isinstance(dynamics_model, BasicEnsemble) and isinstance(dynamics_model.members[0], VBLLMLP):
-                    val_size = int(replay_buffer.num_stored * cfg.validation_ratio)
+                if isinstance(dynamics_model.model, BasicEnsemble) and isinstance(dynamics_model.model.members[0], VBLLMLP):
+                    val_size = int(replay_buffer.num_stored * cfg.overrides.validation_ratio)
                     train_size = replay_buffer.num_stored - val_size
-                    for member in dynamics_model.members:
+                    for member in dynamics_model.model.members:
                         member.update_regularization_weight_from_dataset_length(train_size)
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
