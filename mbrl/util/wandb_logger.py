@@ -5,6 +5,8 @@ import omegaconf
 import wandb
 from mbrl.util.logger import Logger
 from mbrl.util.logger import LogTypes
+from mbrl.util.logger import LogFormatType
+import mbrl.constants as constants
 
 class WANDBLogger(Logger):
     """extends the Logger class to log data to Weights & Biases.
@@ -27,8 +29,43 @@ class WANDBLogger(Logger):
             config=wnb_cfg,
             group=cfg.algorithm.name + "_" + cfg.overrides.env,
         )
+        define_vbllts_wandb_metrices()
 
     def log_data(self, group_name: str, data: Mapping[str, LogTypes]):
         super().log_data(group_name, data, dump=False)
         wb_data = {f"{group_name}/{key}": value for key, value in data.items()}
         wandb.log(wb_data)
+    
+def define_vbllts_wandb_metrices(): # this mehtod just does not seem to work 
+        EVAL_LOG_NAME = constants.RESULTS_LOG_NAME
+        STEP_LOG_NAME = constants.STEP_LOG_NAME
+        MODEL_LOG_NAME = constants.TRAIN_LOG_GROUP_NAME
+        TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION = constants.TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION
+
+        # define RL metrices
+        env_step_metric = wandb.define_metric(f"{STEP_LOG_NAME}/env_step")
+        wandb.define_metric(f"{EVAL_LOG_NAME}/step_reward", step_metric=env_step_metric)
+
+        wandb.define_metric(f"{EVAL_LOG_NAME}/episode")
+        wandb.define_metric(f"{EVAL_LOG_NAME}/env_step", step_metric=f"{EVAL_LOG_NAME}/episode")
+        wandb.define_metric(f"{EVAL_LOG_NAME}/episode_reward", step_metric=f"{EVAL_LOG_NAME}/episode", summary="max")
+        wandb.define_metric(f"{EVAL_LOG_NAME}/episode_length", step_metric=f"{EVAL_LOG_NAME}/episode", summary="mean")
+        # define model metrices
+        wandb.define_metric(f"{MODEL_LOG_NAME}/train_iteration")
+        wandb.define_metric(f"{MODEL_LOG_NAME}/epoch")
+        wandb.define_metric(f"{MODEL_LOG_NAME}/train_dataset_size", step_metric=f"{MODEL_LOG_NAME}/train_iteration")
+        wandb.define_metric(f"{MODEL_LOG_NAME}/val_dataset_size", step_metric=f"{MODEL_LOG_NAME}/train_iteration")
+        wandb.define_metric(f"{MODEL_LOG_NAME}/model_loss", summary="mean")
+        wandb.define_metric(f"{MODEL_LOG_NAME}/model_val_score", summary="mean")
+        wandb.define_metric(f"{MODEL_LOG_NAME}/model_best_val_score", step_metric=f"{MODEL_LOG_NAME}/train_iteration")
+
+        # define extended model metrices
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_avg_val_MSE_score", summary="mean", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_best_val_MSE_score", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_avg_val_nll_score", summary="mean", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_best_val_nll_score", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_avg_val_vbll_score", summary="mean", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_best_val_vbll_score", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_avg_vbll_train_loss_score", summary="mean", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")
+        wandb.define_metric(f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/model_best_vbll_train_loss_score", step_metric=f"{TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION}/train_iteration")

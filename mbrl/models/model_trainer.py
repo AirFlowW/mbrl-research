@@ -12,20 +12,16 @@ import torch
 import tqdm
 from torch import optim as optim
 
+from mbrl import constants
+from mbrl.models.basic_ensemble import BasicEnsemble
+from mbrl.models.vbll_mlp import VBLLMLP
 from mbrl.util.logger import Logger
 from mbrl.util.replay_buffer import BootstrapIterator, TransitionIterator
 
 from .model import Model
 
-MODEL_LOG_FORMAT = [
-    ("train_iteration", "I", "int"),
-    ("epoch", "E", "int"),
-    ("train_dataset_size", "TD", "int"),
-    ("val_dataset_size", "VD", "int"),
-    ("model_loss", "MLOSS", "float"),
-    ("model_val_score", "MVSCORE", "float"),
-    ("model_best_val_score", "MBVSCORE", "float"),
-]
+MODEL_LOG_FORMAT = constants.MODEL_LOG_FORMAT
+MODEL_LOG_FORMAT_VBLL_EXTENSION = constants.MODEL_LOG_FORMAT_VBLL_EXTENSION
 
 
 class ModelTrainer:
@@ -38,7 +34,8 @@ class ModelTrainer:
         logger (:class:`mbrl.util.Logger`, optional): the logger to use.
     """
 
-    _LOG_GROUP_NAME = "model_train"
+    _LOG_GROUP_NAME = constants.TRAIN_LOG_GROUP_NAME
+    _LOG_GROUP_NAME_VBLL_EXTENSION = constants.TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION
 
     def __init__(
         self,
@@ -59,9 +56,22 @@ class ModelTrainer:
                 color="blue",
                 dump_frequency=1,
             )
-
+            if isinstance(self.model.model, BasicEnsemble) and isinstance(self.model.model.members[0], VBLLMLP):
+                self.logger.register_group(
+                    self._LOG_GROUP_NAME_VBLL_EXTENSION,
+                    MODEL_LOG_FORMAT_VBLL_EXTENSION,
+                    color="blue",
+                    dump_frequency=1,
+                )
+        param_list = [
+            # All parameters except the VBLL.Regression layer get the specified weight decay
+            {'params': [param for name, param in model.named_parameters() if 'out_layer' not in name], 'weight_decay': weight_decay},
+            
+            # The VBLL.Regression layer (out_layer) has weight decay set to zero
+            {'params': [param for name, param in model.named_parameters() if 'out_layer' in name], 'weight_decay': 0.},
+        ]
         self.optimizer = optim.Adam(
-            self.model.parameters(),
+            param_list,
             lr=optim_lr,
             weight_decay=weight_decay,
             eps=optim_eps,
@@ -138,10 +148,11 @@ class ModelTrainer:
         best_weights: Optional[Dict] = None
         epoch_iter = range(num_epochs) if num_epochs else itertools.count()
         epochs_since_update = 0
-        best_val_score = self.evaluate(eval_dataset) if evaluate else None
+        (best_val_score, meta) = self.evaluate(eval_dataset) if evaluate else (None, None)
         # only enable tqdm if training for a single epoch,
         # otherwise it produces too much output
         disable_tqdm = silent or (num_epochs is None or num_epochs > 1)
+        eval_meta_list = []
 
         for epoch in epoch_iter:
             if batch_callback:
@@ -160,9 +171,10 @@ class ModelTrainer:
             eval_score = None
             model_val_score = 0
             if evaluate:
-                eval_score = self.evaluate(
+                eval_score, eval_meta = self.evaluate(
                     eval_dataset, batch_callback=batch_callback_epoch
                 )
+                eval_meta_list.append(eval_meta)
                 val_scores.append(eval_score.mean().item())
 
                 maybe_best_weights = self.maybe_get_best_weights(
@@ -180,7 +192,7 @@ class ModelTrainer:
                 self.logger.log_data(
                     self._LOG_GROUP_NAME,
                     {
-                        "iteration": self._train_iteration,
+                        "train_iteration": self._train_iteration,
                         "epoch": epoch,
                         "train_dataset_size": dataset_train.num_stored,
                         "val_dataset_size": dataset_val.num_stored
@@ -209,13 +221,32 @@ class ModelTrainer:
         # saving the best models:
         if evaluate:
             self._maybe_set_best_weights_and_elite(best_weights, best_val_score)
+        if self.logger and isinstance(self.model.model, BasicEnsemble) and isinstance(self.model.model.members[0], VBLLMLP):
+            VBLL_val_loss_tensor = torch.tensor([entry['VBLL_val_loss'] for entry in eval_meta_list])
+            NLL_tensor = torch.tensor([entry['NLL'] for entry in eval_meta_list])
+            MSE_tensor = torch.tensor([entry['MSE'] for entry in eval_meta_list])
+            VBLL_train_loss_tensor = torch.tensor([entry['VBLL_train_loss'] for entry in eval_meta_list])
+            self.logger.log_data(
+                self._LOG_GROUP_NAME_VBLL_EXTENSION,
+                {
+                    "train_iteration": self._train_iteration,
+                    "model_avg_val_MSE_score": torch.mean(MSE_tensor).item(),
+                    "model_best_val_MSE_score": torch.min(MSE_tensor).item(),
+                    "model_avg_val_nll_score": torch.mean(NLL_tensor).item(),
+                    "model_best_val_nll_score": torch.min(NLL_tensor).item(),
+                    "model_avg_val_vbll_score": torch.mean(VBLL_val_loss_tensor).item(),
+                    "model_best_val_vbll_score": torch.min(VBLL_val_loss_tensor).item(),
+                    "model_avg_vbll_train_loss_score": VBLL_train_loss_tensor.mean().item(),
+                    "model_best_vbll_train_loss_score":  VBLL_train_loss_tensor.min().item(),
+                },
+            )
 
         self._train_iteration += 1
         return training_losses, val_scores
 
     def evaluate(
         self, dataset: TransitionIterator, batch_callback: Optional[Callable] = None
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Dict]:
         """Evaluates the model on the validation dataset.
 
         Iterates over the dataset, one batch at a time, and calls
@@ -237,9 +268,19 @@ class ModelTrainer:
         if isinstance(dataset, BootstrapIterator):
             dataset.toggle_bootstrap()
 
+        sum_meta = {}
+        no_batches = 0
         batch_scores_list = []
         for batch in dataset:
             batch_score, meta = self.model.eval_score(batch)
+            no_batches += 1
+            sum_meta = {
+                model_name: {
+                    key: sum_meta.get(model_name, {}).get(key, 0) + meta.get(model_name, {}).get(key, 0)
+                    for key in set(sum_meta.get(model_name, {})) | set(meta.get(model_name, {}))
+                }
+                for model_name in set(meta)
+            }
             batch_scores_list.append(batch_score)
             if batch_callback:
                 batch_callback(batch_score.mean(), meta, "eval")
@@ -258,8 +299,13 @@ class ModelTrainer:
 
         mean_axis = 1 if batch_scores.ndim == 2 else (1, 2)
         batch_scores = batch_scores.mean(dim=mean_axis)
-
-        return batch_scores
+        
+        meta = {model: {key: value / no_batches for key, value in metrics.items()} for model, metrics in sum_meta.items()}
+        meta_average_across_models = {
+            key: sum(model_metrics.get(key, 0) for model_metrics in meta.values()) / len(meta)
+            for key in {k for metrics in meta.values() for k in metrics}
+        }
+        return batch_scores, meta_average_across_models
 
     def maybe_get_best_weights(
         self,

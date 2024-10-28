@@ -11,7 +11,9 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
-import vbll # TODO in yaml activation fn aendern zu ELU
+import vbll
+
+from mbrl import util
 
 from .model import Model
 from .util import truncated_normal_init
@@ -31,6 +33,7 @@ class VBLLMLP(Model):
                           (e.g., if ``num_layers == 3``, then model graph looks like
                           input -h1-> -h2-> -l3-> output).
         hid_size (int): the size of the hidden layers (e.g., size of h1 and h2 in the graph above).
+        feature_dim (int): the size of the feature representation (e.g., size of l3 in the graph above).
         deterministic (bool): if ``True``, the model will be trained using MSE loss and no
             logvar prediction will be done. Defaults to ``False``.
         activation_fn_cfg (dict or omegaconf.DictConfig, optional): configuration of the
@@ -51,6 +54,7 @@ class VBLLMLP(Model):
         device: Union[str, torch.device],
         num_layers: int = 4,
         hid_size: int = 200,
+        feature_dim: int = 200,
         deterministic: bool = False,
         activation_fn_cfg: Optional[Union[Dict, omegaconf.DictConfig]] = None,
         regularization_weight_factor: int = 1,
@@ -75,14 +79,17 @@ class VBLLMLP(Model):
                 activation_func = hydra.utils.instantiate(cfg)
             return activation_func
 
+        if num_layers < 2:
+            raise ValueError("Number of layers must be at least 2.")
         hidden_layers = [nn.Sequential(nn.Linear(in_size, hid_size), create_activation())]
-        for i in range(num_layers - 1):
+        for i in range(num_layers - 2):
             hidden_layers.append(nn.Sequential(nn.Linear(hid_size, hid_size), create_activation()))
+        hidden_layers.append(nn.Sequential(nn.Linear(hid_size, feature_dim), create_activation()))
 
         self.feature_extractor = nn.Sequential(*hidden_layers)
 
         # define output layer
-        self.out_layer = vbll.Regression(hid_size, out_size, regularization_weight=regularization_weight_factor, parameterization=parameterization, 
+        self.out_layer = vbll.Regression(feature_dim, out_size, regularization_weight=regularization_weight_factor, parameterization=parameterization, 
             cov_rank=cov_rank, prior_scale = prior_scale, wishart_scale = wishart_scale)
 
         self.apply(truncated_normal_init)
@@ -104,9 +111,7 @@ class VBLLMLP(Model):
         """
         out = self._default_forward_out(x)
         pred = out.predictive
-        cov = pred.covariance
-        last_dim = cov.dim() - 1
-        var = torch.diagonal(cov, dim1=last_dim-1, dim2=last_dim)
+        var = pred.var
         logvar = torch.log(var)
 
         return pred.mean, logvar
@@ -119,7 +124,7 @@ class VBLLMLP(Model):
         """ computes vbll loss
         more documentation in interface class Model
         """
-        out = self._default_forward_out(model_in, use_propagation=False)
+        out = self._default_forward_out(model_in)
         return out.train_loss_fn(target), {}
         
     def eval_score(  # type: ignore
@@ -128,11 +133,14 @@ class VBLLMLP(Model):
         """Computes the negative log likelihood of the target given the input.
         """
         with torch.no_grad():
-            pred_mean, pred_logvar = self.forward(model_in)
-            nll = 0.5 * (pred_logvar + ((target - pred_mean) ** 2)
-                                    / torch.exp(pred_logvar))
-            mse = F.mse_loss(pred_mean, target, reduction="none")
-            return nll, {"MSE":mse}
+            out = self._default_forward_out(model_in)
+            pred_mean, pred_logvar = out.predictive.mean, torch.log(out.predictive.var)
+            VBLL_val_loss = out.val_loss_fn(target)/self.out_size # divide by out_size to get rid of sum over last dim
+            VBLL_train_loss = out.train_loss_fn(target)
+            VBLL_val_loss_non_reduced = -out.predictive.log_prob(target) # same validation score as the val_loss_fn but non_reduced
+            nll = util.math.gaussian_nll(pred_mean, pred_logvar, target, reduce=False)
+            loss = nn.MSELoss(reduction="none")
+            return VBLL_val_loss_non_reduced, {"NLL": nll.mean(), "VBLL_val_loss": VBLL_val_loss, "MSE": loss(pred_mean, target).mean(), "VBLL_train_loss": VBLL_train_loss}
         
     def update_regularization_weight_from_dataset_length(self,dataset_length: int):
         self.out_layer.regularization_weight = self.regularization_weight_factor/dataset_length
