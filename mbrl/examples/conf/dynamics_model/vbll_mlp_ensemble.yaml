@@ -3,6 +3,8 @@ _target_: mbrl.models.BasicEnsemble
 ensemble_size: 1
 device: ${device}
 propagation_method: random_model
+clip_val: 
+
 member_cfg:
   _target_: mbrl.models.VBLLMLP
   device: ${device}

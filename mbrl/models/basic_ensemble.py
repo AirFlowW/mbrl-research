@@ -54,6 +54,7 @@ class BasicEnsemble(Ensemble):
                                            `hydra.utils.instantiate(member_cfg)`.
         propagation_method (str, optional): the uncertainty propagation method to use (see
             above). Defaults to ``None``.
+        clip_val (float, optional): the value to clip the gradients by. If ``None``, no clipping is done.
     """
 
     def __init__(
@@ -62,6 +63,7 @@ class BasicEnsemble(Ensemble):
         device: Union[str, torch.device],
         member_cfg: omegaconf.DictConfig,
         propagation_method: Optional[str] = None,
+        clip_val: Optional[float] = None,
     ):
         super().__init__(
             ensemble_size,
@@ -77,6 +79,7 @@ class BasicEnsemble(Ensemble):
         self.in_size = getattr(self.members[0], "in_size", None)
         self.out_size = getattr(self.members[0], "out_size", None)
         self.members = nn.ModuleList(self.members)
+        self.clip_val = clip_val
 
     def __len__(self):
         return len(self.members)
@@ -219,6 +222,38 @@ class BasicEnsemble(Ensemble):
             ensemble_meta[f"model_{i}"] = meta
             avg_ensemble_loss += loss
         return avg_ensemble_loss / len(self.members), ensemble_meta
+
+    def update(
+        self,
+        model_in: torch.Tensor,
+        optimizer: torch.optim.Optimizer,
+        target: Optional[torch.Tensor] = None,
+    ) -> Tuple[float, Dict[str, Any]]:
+        """Updates the model using backpropagation with given input and target tensors.
+        Args:
+            model_in (tensor or batch of transitions): the inputs to the model.
+            optimizer (torch.optimizer): the optimizer to use for the model.
+            target (tensor or sequence of tensors): the expected output for the given inputs, if it
+                cannot be computed from ``model_in``.
+
+        Returns:
+             (float): the numeric value of the computed loss.
+             (dict): any additional metadata dictionary computed by :meth:`loss`.
+        """
+        self.train()
+        optimizer.zero_grad()
+        loss, meta = self.loss(model_in, target)
+        loss.backward()
+        if meta is not None:
+            with torch.no_grad():
+                grad_norm = 0.0
+                for p in list(filter(lambda p: p.grad is not None, self.parameters())):
+                    grad_norm += p.grad.data.norm(2).item() ** 2
+                meta["grad_norm"] = grad_norm
+        if self.clip_val is not None:
+            torch.nn.utils.clip_grad_norm_(self.parameters(), self.clip_val * len(self.members))
+        optimizer.step()
+        return loss.item(), meta
 
     def eval_score(  # type: ignore
         self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None
