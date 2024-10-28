@@ -11,7 +11,9 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
-import vbll # TODO in yaml activation fn aendern zu ELU
+import vbll
+
+from mbrl import util
 
 from .model import Model
 from .util import truncated_normal_init
@@ -109,9 +111,7 @@ class VBLLMLP(Model):
         """
         out = self._default_forward_out(x)
         pred = out.predictive
-        cov = pred.covariance
-        last_dim = cov.dim() - 1
-        var = torch.diagonal(cov, dim1=last_dim-1, dim2=last_dim)
+        var = pred.var
         logvar = torch.log(var)
 
         return pred.mean, logvar
@@ -124,7 +124,7 @@ class VBLLMLP(Model):
         """ computes vbll loss
         more documentation in interface class Model
         """
-        out = self._default_forward_out(model_in, use_propagation=False)
+        out = self._default_forward_out(model_in)
         return out.train_loss_fn(target), {}
         
     def eval_score(  # type: ignore
@@ -133,11 +133,14 @@ class VBLLMLP(Model):
         """Computes the negative log likelihood of the target given the input.
         """
         with torch.no_grad():
-            pred_mean, pred_logvar = self.forward(model_in)
-            nll = 0.5 * (pred_logvar + ((target - pred_mean) ** 2)
-                                    / torch.exp(pred_logvar))
-            mse = F.mse_loss(pred_mean, target, reduction="none")
-            return nll, {"MSE":mse}
+            out = self._default_forward_out(model_in)
+            pred_mean, pred_logvar = out.predictive.mean, torch.log(out.predictive.var)
+            VBLL_val_loss = out.val_loss_fn(target)/self.out_size # divide by out_size to get rid of sum over last dim
+            VBLL_train_loss = out.train_loss_fn(target)
+            VBLL_val_loss_non_reduced = -out.predictive.log_prob(target) # same validation score as the val_loss_fn but non_reduced
+            nll = util.math.gaussian_nll(pred_mean, pred_logvar, target, reduce=False)
+            loss = nn.MSELoss(reduction="none")
+            return VBLL_val_loss_non_reduced, {"NLL": nll.mean(), "VBLL_val_loss": VBLL_val_loss, "MSE": loss(pred_mean, target).mean(), "VBLL_train_loss": VBLL_train_loss}
         
     def update_regularization_weight_from_dataset_length(self,dataset_length: int):
         self.out_layer.regularization_weight = self.regularization_weight_factor/dataset_length
