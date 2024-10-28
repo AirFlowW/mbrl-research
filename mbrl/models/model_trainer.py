@@ -63,9 +63,15 @@ class ModelTrainer:
                     color="blue",
                     dump_frequency=1,
                 )
-
+        param_list = [
+            # All parameters except the VBLL.Regression layer get the specified weight decay
+            {'params': [param for name, param in model.named_parameters() if 'out_layer' not in name], 'weight_decay': weight_decay},
+            
+            # The VBLL.Regression layer (out_layer) has weight decay set to zero
+            {'params': [param for name, param in model.named_parameters() if 'out_layer' in name], 'weight_decay': 0.},
+        ]
         self.optimizer = optim.Adam(
-            self.model.parameters(),
+            param_list,
             lr=optim_lr,
             weight_decay=weight_decay,
             eps=optim_eps,
