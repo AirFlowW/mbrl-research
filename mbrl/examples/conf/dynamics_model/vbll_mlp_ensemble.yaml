@@ -22,4 +22,4 @@ member_cfg:
   parameterization: "dense" 
   cov_rank: 1 
   prior_scale: 1.
-  wishart_scale: 1.
+  wishart_scale: 0.1
