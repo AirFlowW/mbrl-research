@@ -1,4 +1,6 @@
+import os
 import pathlib
+import shutil
 from typing import Mapping, Union
 
 import omegaconf
@@ -35,6 +37,17 @@ class WANDBLogger(Logger):
         super().log_data(group_name, data, dump=False)
         wb_data = {f"{group_name}/{key}": value for key, value in data.items()}
         wandb.log(wb_data)
+
+    def upload_model(self, cfg_env_name, dynamics_model, env_steps, remove_after_upload=True):
+        wd = os.getcwd()
+        temp_model_dir = f"{wd}/models/step{env_steps}"
+        os.makedirs(temp_model_dir, exist_ok=True)
+        dynamics_model.save(temp_model_dir)
+        artifact = wandb.Artifact(f"{cfg_env_name}-{wandb.run.name}-step{env_steps}", type='model')
+        artifact.add_file(f"{temp_model_dir}/model.pth")
+        wandb.log_artifact(artifact)
+        if remove_after_upload:
+            shutil.rmtree(temp_model_dir)
     
 def define_vbllts_wandb_metrices(): # this mehtod just does not seem to work 
         EVAL_LOG_NAME = constants.RESULTS_LOG_NAME

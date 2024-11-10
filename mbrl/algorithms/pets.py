@@ -124,6 +124,9 @@ def train(
                     replay_buffer,
                     work_dir=work_dir,
                 )
+            # save model to wandb
+            if cfg.get("model_log_freq_ratio", False) and (env_steps + 1) % int(cfg.overrides.num_steps/cfg.model_log_freq_ratio) == 1 and cfg.logger == "wandb":
+                logger.upload_model(cfg.overrides.env, dynamics_model, env_steps+1)
 
             # --- Doing env step using the agent and adding to model dataset ---
             (
