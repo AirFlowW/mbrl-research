@@ -1,26 +1,29 @@
 program: mbrl.examples.main  # not a script to run but a module to run
 
-method: bayes  # grid, random, bayes
+method: grid  # grid, random, bayes
 metric:
-  name: episode_reward  # what to optimize
+  name: results/episode_reward.max  # what to optimize
   goal: maximize  # maximize / minimize
 
 # hyperparameter to search in - look at example_config.yaml where a cfg of a run was printed
 parameters:
-  dynamics_model.ensemble_size:
-    values: [9, 8, 4] 
+  dynamics_model.member_cfg.hid_size: 
+    values: [200, 50]
 
 command:
   - ${env}
   - python
   - -m
   - ${program}
+  - algorithm=pets
+  - dynamics_model=vbll_mlp_ensemble
+  - overrides=vbllts_hopper
   - ${args_no_hyphens}
 
+# only in random and grid?:
+# early_terminate: 
+#   type: hyperband  # hyperband, median, none
+#   max_iter: 27  # max iterations
 
-early_terminate: 
-  type: hyperband  # hyperband, median, none
-  max_iter: 27  # max iterations
-
-# number of runs in the sweep
-total_runs: 3  
+# number of runs in the sweep - only in random and bayes?:
+# total_runs: 3  
