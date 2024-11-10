@@ -5,3 +5,4 @@
 from .eval_model_on_dataset import DatasetEvaluator
 from .finetune_model_with_controller import FineTuner
 from .visualize_model_preds import Visualizer
+from .reduce_fns import cartpole_reduce_fn, hopper_reduce_fn
