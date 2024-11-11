@@ -1,0 +1,40 @@
+# This is the default configuration file for the PETS algorithm.
+# It uses a VBLLMLP model for the dynamics model and the Hopper environment.
+overrides:
+  env: "gym___Hopper-v4"
+  term_fn: "hopper"
+  learned_rewards: true
+  num_elites: 5
+
+algorithm:
+  _target_: mbrl.algorithms.PETS
+  learned_rewards: ${overrides.learned_rewards}
+
+dynamics_model:
+  _target_: mbrl.models.BasicEnsemble
+  ensemble_size: 1
+  device: ${device}
+  propagation_method: random_model
+  clip_val: 
+
+  member_cfg:
+    _target_: mbrl.models.VBLLMLP
+    device: ${device}
+    in_size: ???
+    out_size: ???
+    deterministic: false
+    
+    activation_fn_cfg:
+      _target_: torch.nn.ELU
+
+    num_layers: 4
+    hid_size: 200
+    feature_dim: 50
+    regularization_weight_factor: 1
+    parameterization: "dense" 
+    cov_rank: 1 
+    prior_scale: 1.
+    wishart_scale: 0.1
+
+seed: 0
+device: "cpu"

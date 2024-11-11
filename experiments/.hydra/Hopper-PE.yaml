@@ -1,0 +1,22 @@
+overrides:
+  env: "gym___Hopper-v4"
+  term_fn: "hopper"
+  learned_rewards: true
+  num_elites: 5
+
+algorithm:
+  _target_: mbrl.algorithms.PETS
+  learned_rewards: ${overrides.learned_rewards}
+
+dynamics_model:
+  _target_: mbrl.models.GaussianMLP
+  ensemble_size: 7
+  device: ${device}
+  propagation_method: random_model
+  learn_logvar_bounds: false
+  deterministic: false
+  num_layers: 4
+  hid_size: 200
+
+seed: 0
+device: "cpu"

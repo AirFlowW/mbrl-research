@@ -29,12 +29,26 @@ class Visualizer:
         num_steps: Optional[int] = None,
         num_model_samples: int = 1,
         model_subdir: Optional[str] = None,
+        cfg_file_path: Optional[str] = None,
     ):
         self.lookahead = lookahead
         self.results_path = pathlib.Path(results_dir)
         self.model_path = self.results_path
         self.vis_path = self.results_path / "diagnostics"
+
+        if cfg_file_path is None:
+            cfg_file_path = pathlib.Path(results_dir) / ".hydra" / "config.yaml"
+        self.cfg = mbrl.util.common.load_hydra_cfg_from_path(cfg_file_path)
+
+        if model_subdir is None:
+            if self.cfg.dynamics_model._target_ == "mbrl.models.BasicEnsemble" and \
+                    self.cfg.dynamics_model.member_cfg._target_ == "mbrl.models.VBLLMLP":
+                model_subdir = "models/VBLL"
+            elif self.cfg.dynamics_model._target_ == "mbrl.models.GaussianMLP":
+                model_subdir = "models/PE"
+
         if model_subdir:
+            model_subdir +=  f"/{self.cfg.overrides.env}"
             self.model_path /= model_subdir
             # If model subdir is child of diagnostics, remove "diagnostics" before
             # appending to vis_path. This can happen, for example, if Finetuner
@@ -47,7 +61,6 @@ class Visualizer:
         self.num_model_samples = num_model_samples
         self.num_steps = num_steps
 
-        self.cfg = mbrl.util.common.load_hydra_cfg(self.results_path)
         self.handler = mbrl.util.create_handler(self.cfg)
 
         self.env, term_fn, reward_fn = self.handler.make_env(self.cfg)
@@ -141,7 +154,7 @@ class Visualizer:
         i = 0
         while not terminated and not truncated:
             vis_data = self.get_obs_rewards_and_actions(obs, use_mpc=use_mpc)
-            action = self.agent.act(obs)
+            action = vis_data[-1][0]
             next_obs, reward, terminated, truncated, _ = self.env.step(action)
             self.total_reward += reward
             obs = next_obs
@@ -290,6 +303,13 @@ if __name__ == "__main__":
         default=35,
         help="Number of samples from the model, to visualize uncertainty.",
     )
+    parser.add_argument(
+        "--cfg_file_path",
+        type=str,
+        default=None,
+        help="Path to the cfg file which should be used."
+            "Default None means the cfg file is assumed to be in results_dir/.hydra/config.yaml.",
+    )
     args = parser.parse_args()
 
     visualizer = Visualizer(
@@ -299,6 +319,7 @@ if __name__ == "__main__":
         num_steps=args.num_steps,
         num_model_samples=args.num_model_samples,
         model_subdir=args.model_subdir,
+        cfg_file_path=args.cfg_file_path,
     )
     use_mpc = isinstance(visualizer.agent, mbrl.planning.TrajectoryOptimizerAgent)
     visualizer.run(use_mpc=use_mpc)

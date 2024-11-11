@@ -1,5 +1,7 @@
 *personal*
 exp/
+experiments/diagnostics/
+model.pth
 .python-version
 .vscode
 .idea

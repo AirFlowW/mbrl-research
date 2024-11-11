@@ -129,6 +129,23 @@ def load_hydra_cfg(results_dir: Union[str, pathlib.Path]) -> omegaconf.DictConfi
         raise RuntimeError("Configuration format not a omegaconf.DictConf")
     return cfg
 
+def load_hydra_cfg_from_path(cfg_file: Union[str, pathlib.Path]) -> omegaconf.DictConfig:
+    """Loads a Hydra configuration from the given path.
+
+    Tries to load the configuration from "cfg_file".
+
+    Args:
+        cfg_file (str or pathlib.Path): the path to the directory containing the config.
+
+    Returns:
+        (omegaconf.DictConfig): the loaded configuration.
+
+    """
+    cfg_file = pathlib.Path(cfg_file)
+    cfg = omegaconf.OmegaConf.load(cfg_file)
+    if not isinstance(cfg, omegaconf.DictConfig):
+        raise RuntimeError("Configuration format not a omegaconf.DictConf")
+    return cfg
 
 def create_replay_buffer(
     cfg: omegaconf.DictConfig,
