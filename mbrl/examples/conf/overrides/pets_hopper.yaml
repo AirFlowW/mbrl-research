@@ -2,8 +2,9 @@
 env: "gym___Hopper-v4"
 term_fn: "hopper"
 learned_rewards: true
-num_steps: 125000
+num_steps: 27500
 trial_length: 1000
+freq_log_model: 5500
 
 num_elites: 5
 model_lr: 2e-4
