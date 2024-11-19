@@ -11,6 +11,7 @@ member_cfg:
   in_size: ???
   out_size: ???
   deterministic: false
+  recursive_num_epochs: 8
   
   activation_fn_cfg:
     _target_: torch.nn.ELU
@@ -19,7 +20,7 @@ member_cfg:
   hid_size: 200
   feature_dim: 50
   regularization_weight_factor: 1
-  parameterization: "dense" 
+  parameterization: "dense_precision"
   cov_rank: 1 
   prior_scale: 1.
   wishart_scale: 0.1

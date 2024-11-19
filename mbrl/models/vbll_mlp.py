@@ -36,6 +36,8 @@ class VBLLMLP(Model):
         feature_dim (int): the size of the feature representation (e.g., size of l3 in the graph above).
         deterministic (bool): if ``True``, the model will be trained using MSE loss and no
             logvar prediction will be done. Defaults to ``False``.
+        recursive_num_epochs (int): number of epochs to train the model recursively.
+            If ``None``, no recursive training is performed
         activation_fn_cfg (dict or omegaconf.DictConfig, optional): configuration of the
             desired activation function. Defaults to torch.nn.ELU when ``None``.
         regularization_weight_factor (int): the factor k to multiply the regularization weight by.
@@ -56,6 +58,7 @@ class VBLLMLP(Model):
         hid_size: int = 200,
         feature_dim: int = 200,
         deterministic: bool = False,
+        recursive_num_epochs: int = None,
         activation_fn_cfg: Optional[Union[Dict, omegaconf.DictConfig]] = None,
         regularization_weight_factor: int = 1,
         parameterization: str = 'dense',
@@ -69,6 +72,7 @@ class VBLLMLP(Model):
         self.regularization_weight_factor = regularization_weight_factor
         self.in_size = in_size
         self.out_size = out_size
+        self.recursive_num_epochs = recursive_num_epochs
 
         # define network / feature representation (MLP)
         def create_activation():
@@ -126,6 +130,12 @@ class VBLLMLP(Model):
         """
         out = self._default_forward_out(model_in)
         return out.train_loss_fn(target), {}
+    
+    def train_recursively(self, model_in, target):
+        with torch.no_grad():
+            for _ in range(self.recursive_num_epochs):
+                out = self._default_forward_out(model_in)
+                out.train_loss_fn(target, recursive_update=True)
         
     def eval_score(  # type: ignore
         self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None

@@ -702,6 +702,20 @@ class ReplayBuffer:
                 self.truncated[: self.num_stored],
             )
 
+    def get_last_sample(self) -> TransitionBatch:
+        """Returns the last transition stored in the replay buffer."""
+        last_idx = self.cur_idx - 1
+        if last_idx < 0:
+            last_idx = self.num_stored - 1
+        return TransitionBatch(
+            self.obs[last_idx],
+            self.action[last_idx],
+            self.next_obs[last_idx],
+            self.reward[last_idx],
+            self.terminated[last_idx],
+            self.truncated[last_idx],
+        )
+
     @property
     def rng(self) -> np.random.Generator:
         return self._rng

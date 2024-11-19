@@ -8,10 +8,11 @@ deterministic: false
 activation_fn_cfg:
   _target_: torch.nn.ELU
 
+recursive_num_epochs: 8
 hid_size: 200 #50 150 200 250
 num_layers: 4 # 3-6
 regularization_weight_factor: 1 #=:k with k/dataset length
-parameterization: "dense" # low_rank diag
+parameterization: "dense" # low_rank diag dense dense_precision (last one is needed for recursive updates)
 cov_rank: 1 #hidden_size/2 3/4 1/4
 prior_scale: 1. #
 wishart_scale: 1. #0.001 0.01 0.1 1

@@ -145,6 +145,16 @@ def train(
             steps_trial += 1
             env_steps += 1
 
+            # update vbll model recursively
+            if isinstance(dynamics_model.model, BasicEnsemble) and isinstance(dynamics_model.model.members[0], VBLLMLP) \
+                     and 'dense_precision' == cfg.dynamics_model.member_cfg.get("parameterization", 'False'):
+                last_sample = replay_buffer.get_last_sample()
+                model_in, target = dynamics_model._process_batch(last_sample)
+                target = target.unsqueeze(0) # add batch dimension
+                for member in dynamics_model.model.members:
+                    if member.recursive_num_epochs is not None:
+                        member.train_recursively(model_in, target)
+
             if logger is not None:
                 logger.log_data(
                     mbrl.constants.STEP_LOG_NAME,
