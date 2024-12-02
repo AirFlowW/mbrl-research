@@ -18,6 +18,11 @@ STEP_LOG_FORMAT = [
     ("step_reward", "R", "float"),
 ]
 
+VBLL_LOG_NAME = "vbll"
+VBLL_LOG_FORMAT = [
+    ("avg_no_recursive_updates", "AVGRU", "float"),
+]
+
 TRAIN_LOG_GROUP_NAME = "model_train"
 MODEL_LOG_FORMAT = [
     ("train_iteration", "I", "int"),
