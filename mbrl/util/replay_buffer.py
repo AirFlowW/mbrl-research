@@ -707,13 +707,31 @@ class ReplayBuffer:
         last_idx = self.cur_idx - 1
         if last_idx < 0:
             last_idx = self.num_stored - 1
+        obs = self.obs[last_idx]
+        action = self.action[last_idx]
+        next_obs = self.next_obs[last_idx]
+        reward = self.reward[last_idx]
+        terminated = self.terminated[last_idx]
+        truncated = self.truncated[last_idx]
+        if obs.ndim == 1:
+            obs = np.expand_dims(obs, axis=0)
+        if action.ndim == 1:
+            action = np.expand_dims(action, axis=0)
+        if next_obs.ndim == 1:
+            next_obs = np.expand_dims(next_obs, axis=0)
+        if type(reward) is not np.ndarray:
+            reward = np.array([reward])
+        if type(terminated) is not np.ndarray:
+            terminated = np.array([terminated])
+        if type(truncated) is not np.ndarray:
+            truncated = np.array([truncated])
         return TransitionBatch(
-            self.obs[last_idx],
-            self.action[last_idx],
-            self.next_obs[last_idx],
-            self.reward[last_idx],
-            self.terminated[last_idx],
-            self.truncated[last_idx],
+            obs,
+            action,
+            next_obs,
+            reward,
+            terminated,
+            truncated,
         )
 
     @property
