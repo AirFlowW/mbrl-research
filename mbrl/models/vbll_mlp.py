@@ -37,7 +37,6 @@ class VBLLMLP(Model):
         deterministic (bool): if ``True``, the model will be trained using MSE loss and no
             logvar prediction will be done. Defaults to ``False``.
         recursive_num_epochs (int): number of epochs to train the model recursively.
-            If ``None``, no recursive training is performed
         activation_fn_cfg (dict or omegaconf.DictConfig, optional): configuration of the
             desired activation function. Defaults to torch.nn.ELU when ``None``.
         regularization_weight_factor (int): the factor k to multiply the regularization weight by.
@@ -58,7 +57,7 @@ class VBLLMLP(Model):
         hid_size: int = 200,
         feature_dim: int = 200,
         deterministic: bool = False,
-        recursive_num_epochs: int = None,
+        recursive_num_epochs: int = 0,
         activation_fn_cfg: Optional[Union[Dict, omegaconf.DictConfig]] = None,
         regularization_weight_factor: int = 1,
         parameterization: str = 'dense',
@@ -131,11 +130,58 @@ class VBLLMLP(Model):
         out = self._default_forward_out(model_in)
         return out.train_loss_fn(target), {}
     
-    def train_recursively(self, model_in, target):
+    def _train_recursively_auto_epoch(self, model_in, target, eval_model_in, eval_target):
+        """Trains the model recursively until the validation score does not improve anymore."""
+        def eval_fn(eval_model_in, eval_target):
+                    squared = torch.pow(self.eval_score(eval_model_in, eval_target)[0],2)
+                    mean = torch.mean(squared)
+                    return mean.item()
+                
+        recursive_iterations = 0
+        equal_counter = 0
+        last_loss_sum = eval_fn(eval_model_in, eval_target)
+
+        current_loss_sum = last_loss_sum
+        while last_loss_sum >= current_loss_sum and equal_counter < 2 and recursive_iterations < 10:
+            recursive_iterations += 1
+            if last_loss_sum == current_loss_sum:
+                equal_counter += 1
+            else:
+                equal_counter = 0
+            last_loss_sum = current_loss_sum
+            
+            out = self._default_forward_out(model_in)
+            out.train_loss_fn(target, recursive_update=True)
+
+            current_loss_sum =  eval_fn(eval_model_in, eval_target)
+        return recursive_iterations
+    
+    def train_recursively(self, model_in, target, eval_model_in = None, eval_target = None, mode = 2) -> int:
+        """Trains the model recursively for a given number of epochs.
+        
+        :param model_in: Input tensor for recursive updates
+        :param target: Target tensor
+        :param eval_model_in: Input to calculate the eval score to find a suitable number of epochs
+        :param eval_target: Target for calculating the eval score
+        :param mode: 0: no training, 1: train recursively for a fixed number of epochs, 2: train recursively until the validation score does not improve anymore
+        
+        :return: number of executed recursive iterations"""
+
+        if mode == 0:
+            return 0
+        
+        self.train() # gradients are not required but model has to be in train mode
         with torch.no_grad():
-            for _ in range(self.recursive_num_epochs):
-                out = self._default_forward_out(model_in)
-                out.train_loss_fn(target, recursive_update=True)
+            if mode == 1:
+                for _ in range(self.recursive_num_epochs):
+                    out = self._default_forward_out(model_in)
+                    out.train_loss_fn(target, recursive_update=True)
+                return self.recursive_num_epochs
+
+            if mode == 2:
+                return self._train_recursively_auto_epoch(model_in, target, eval_model_in, eval_target)
+        
+        return 0
         
     def eval_score(  # type: ignore
         self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None

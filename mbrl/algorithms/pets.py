@@ -33,6 +33,11 @@ def train(
 ) -> np.float32:
     # ------------------- Initialization -------------------
     debug_mode = cfg.get("debug_mode", False)
+    is_vbll_dynamics_model = mbrl.util.checks.is_VBLL_dynamics_model(cfg)
+
+    # model specific context
+    if is_vbll_dynamics_model:
+        recursive_updates_list = None
 
     obs_shape = env.observation_space.shape
     act_shape = env.action_space.shape
@@ -58,6 +63,10 @@ def train(
         logger.register_group(
             mbrl.constants.STEP_LOG_NAME, mbrl.constants.STEP_LOG_FORMAT, color="yellow"
         )
+        if is_vbll_dynamics_model:
+            logger.register_group(
+                mbrl.constants.VBLL_LOG_NAME, mbrl.constants.VBLL_LOG_FORMAT, color="yellow"
+            )
 
     # -------- Create and populate initial env dataset --------
     dynamics_model = mbrl.util.common.create_one_dim_tr_model(cfg, obs_shape, act_shape)
@@ -112,11 +121,13 @@ def train(
         while not terminated and not truncated:
             # --------------- Model Training -----------------
             if env_steps % cfg.algorithm.freq_train_model == 0:
-                if isinstance(dynamics_model.model, BasicEnsemble) and isinstance(dynamics_model.model.members[0], VBLLMLP):
+                # update regularization weight for VBLL models
+                if is_vbll_dynamics_model:
                     val_size = int(replay_buffer.num_stored * cfg.overrides.validation_ratio)
                     train_size = replay_buffer.num_stored - val_size
                     for member in dynamics_model.model.members:
                         member.update_regularization_weight_from_dataset_length(train_size)
+                        
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
                     model_trainer,
@@ -146,20 +157,26 @@ def train(
             env_steps += 1
 
             # update vbll model recursively
-            if isinstance(dynamics_model.model, BasicEnsemble) and isinstance(dynamics_model.model.members[0], VBLLMLP) \
-                     and 'dense_precision' == cfg.dynamics_model.member_cfg.get("parameterization", 'False'):
-                last_sample = replay_buffer.get_last_sample()
-                model_in, target = dynamics_model._process_batch(last_sample)
-                target = target.unsqueeze(0) # add batch dimension
-                for member in dynamics_model.model.members:
-                    if member.recursive_num_epochs is not None:
-                        member.train_recursively(model_in, target)
+            if cfg.overrides.get("recursive_update", 0) > 0 and is_vbll_dynamics_model and \
+                    env_steps % cfg.overrides.get("no_recursive_update_data", 5) == 0:
+                recursive_updates_list = model_trainer.train_vbll_recursively(
+                    cfg, replay_buffer.get_last_n_samples(cfg.overrides.get("no_recursive_update_data", 5)),
+                    replay_buffer.sample(cfg.overrides.get("no_recursive_update_eval_data", 2500)),
+                    mode = cfg.overrides.get("recursive_update", 0)
+                    )
 
             if logger is not None:
                 logger.log_data(
                     mbrl.constants.STEP_LOG_NAME,
                     {"env_step": env_steps, "step_reward": reward},
                 )
+                if is_vbll_dynamics_model:
+                    avg_recursive_update = np.mean(recursive_updates_list) if recursive_updates_list else 0
+                    logger.log_data(
+                        mbrl.constants.VBLL_LOG_NAME,
+                        {"avg_no_recursive_updates": avg_recursive_update},
+                    )
+                    recursive_updates_list = None
 
         current_trial += 1
         if logger is not None:
