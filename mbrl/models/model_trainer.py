@@ -15,6 +15,7 @@ from torch import optim as optim
 from mbrl import constants
 from mbrl.models.basic_ensemble import BasicEnsemble
 from mbrl.models.vbll_mlp import VBLLMLP
+import mbrl.util.checks as checks
 from mbrl.util.logger import Logger
 from mbrl.util.replay_buffer import BootstrapIterator, TransitionIterator
 
@@ -243,6 +244,33 @@ class ModelTrainer:
 
         self._train_iteration += 1
         return training_losses, val_scores
+    
+    def train_vbll_recursively(self, cfg, update_transition_batch, eval_transition_batch, mode=2):
+        """Trains the model recursively for a given number of epochs.
+
+        :param cfg: configuration object (highest level)
+        :param update_samples: Input TransitionBatch for recursive updates
+        :param eval_samples: Input TransitionBatch to calculate the eval score to find a suitable number of epochs
+        :param mode: 0: no training, 1: train recursively for a fixed number of epochs, 2: train recursively until the validation score does not improve anymore
+
+        :return: numpy array of executed recursive iterations per member. None if recursive train not possible.
+        """
+        # check if recursive training is possible
+        if not (checks.is_VBLL_dynamics_model(cfg) \
+                and 'dense_precision' == cfg.dynamics_model.member_cfg.get("parameterization", 'False')):
+            return None
+        
+        recursive_updates_list = np.array([])
+        recursive_update_model_in, recursive_update_target = self.model._process_batch(update_transition_batch)
+        eval_transition_batch.add_transition_batch(update_transition_batch)
+        eval_model_in, eval_target = self.model._process_batch(eval_transition_batch)
+
+        for member in self.model.model.members:
+            if member.recursive_num_epochs is not None and member.recursive_num_epochs > 0:
+                recursive_updates = member.train_recursively(recursive_update_model_in, 
+                        recursive_update_target, eval_model_in, eval_target, mode=mode)
+                recursive_updates_list = np.append(recursive_updates_list, recursive_updates)
+        return recursive_updates_list
 
     def evaluate(
         self, dataset: TransitionIterator, batch_callback: Optional[Callable] = None
