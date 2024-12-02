@@ -162,6 +162,7 @@ class ModelEnv:
             (torch.Tensor): the accumulated reward for each action sequence, averaged over its
             particles.
         """
+        self.dynamics_model.eval()
         with torch.no_grad():
             assert len(action_sequences.shape) == 3
             population_size, horizon, action_dim = action_sequences.shape
