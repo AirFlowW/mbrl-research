@@ -701,6 +701,16 @@ class ReplayBuffer:
                 self.terminated[: self.num_stored],
                 self.truncated[: self.num_stored],
             )
+        
+    def _get_last_n_indices(self, n):
+        buffer_size = self.capacity
+        indices = [(self.cur_idx - i - 1) % buffer_size for i in range(n)]
+        indices.reverse()
+        return indices
+    
+    def get_last_n_samples(self, n):
+        indices = self._get_last_n_indices(n)
+        return self._batch_from_indices(indices)
 
     def get_last_sample(self) -> TransitionBatch:
         """Returns the last transition stored in the replay buffer."""
