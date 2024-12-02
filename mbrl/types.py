@@ -59,6 +59,22 @@ class TransitionBatch:
         new_shape[0] = batch_size
         new_shape[1] = old_shape[0] // batch_size
         return tuple(new_shape)
+    
+    def add_transition_batch(self, new_TransitionBatch):
+        """Adds new data points to the current TransitionBatch.
+
+        Args:
+            new_TransitionBatch (TransitionBatch): TransitionBatch, with data
+                to add to the current TransitionBatch
+        Returns:
+            None
+        """
+        self.obs=np.concatenate((self.obs, new_TransitionBatch.obs), axis=0)
+        self.act=np.concatenate((self.act, new_TransitionBatch.act), axis=0)
+        self.next_obs=np.concatenate((self.next_obs, new_TransitionBatch.next_obs), axis=0)
+        self.rewards=np.concatenate((self.rewards, new_TransitionBatch.rewards), axis=0)
+        self.terminateds=np.concatenate((self.terminateds, new_TransitionBatch.terminateds), axis=0)
+        self.truncateds=np.concatenate((self.truncateds, new_TransitionBatch.truncateds), axis=0)
 
     def add_new_batch_dim(self, batch_size: int):
         if not len(self) % batch_size == 0:
