@@ -42,7 +42,7 @@ class WANDBLogger(Logger):
         wd = os.getcwd()
         temp_model_dir = f"{wd}/models/step{env_steps}"
         os.makedirs(temp_model_dir, exist_ok=True)
-        dynamics_model.save(temp_model_dir)
+        dynamics_model.model.save(temp_model_dir)
         artifact = wandb.Artifact(f"{cfg_env_name}-{wandb.run.name}-step{env_steps}", type='model')
         artifact.add_file(f"{temp_model_dir}/model.pth")
         wandb.log_artifact(artifact)
