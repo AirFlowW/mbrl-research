@@ -142,7 +142,7 @@ class VBLLMLP(Model):
         last_loss_sum = eval_fn(eval_model_in, eval_target)
 
         current_loss_sum = last_loss_sum
-        while last_loss_sum >= current_loss_sum and equal_counter < 2 and recursive_iterations < 10:
+        while last_loss_sum >= current_loss_sum and equal_counter < 2 and recursive_iterations < self.recursive_num_epochs:
             recursive_iterations += 1
             if last_loss_sum == current_loss_sum:
                 equal_counter += 1
