@@ -32,20 +32,19 @@ class EnsembleLinearLayer(nn.Module):
     """Efficient linear layer for ensemble models."""
 
     def __init__(
-        self, num_members: int, in_size: int, out_size: int, bias: bool = True
+        self, num_members: int, in_size: int, out_size: int, bias: bool = True,
+        weights=None, biases=None
     ):
         super().__init__()
         self.num_members = num_members
         self.in_size = in_size
         self.out_size = out_size
-        self.weight = nn.Parameter(
-            torch.rand(self.num_members, self.in_size, self.out_size)
-        )
+        weight_tensor = torch.rand(self.num_members, self.in_size, self.out_size) if weights is None else weights
+        self.weight = nn.Parameter(weight_tensor)
         if bias:
-            self.bias = nn.Parameter(torch.rand(self.num_members, 1, self.out_size))
-            self.use_bias = True
-        else:
-            self.use_bias = False
+            bias_tensor = torch.rand(self.num_members, 1, self.out_size) if biases is None else biases
+            self.bias = nn.Parameter(bias_tensor)
+        self.use_bias = bias
 
         self.elite_models: List[int] = None
         self.use_only_elite = False
