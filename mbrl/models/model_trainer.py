@@ -260,13 +260,16 @@ class ModelTrainer:
                 and 'dense_precision' == cfg.dynamics_model.member_cfg.get("parameterization", 'False')):
             return None
         
+        if checks.is_VBLL_thompson_dynamics_model(cfg):
+            self.model.model.reset_thompson_mlps()
+        
         recursive_updates_list = np.array([])
         recursive_update_model_in, recursive_update_target = self.model._process_batch(update_transition_batch)
         eval_transition_batch.add_transition_batch(update_transition_batch)
         eval_model_in, eval_target = self.model._process_batch(eval_transition_batch)
 
         for member in self.model.model.members:
-            if member.recursive_num_epochs is not None and member.recursive_num_epochs > 0:
+            if member.recursive_num_epochs is not None:
                 recursive_updates = member.train_recursively(recursive_update_model_in, 
                         recursive_update_target, eval_model_in, eval_target, mode=mode)
                 recursive_updates_list = np.append(recursive_updates_list, recursive_updates)

@@ -1,0 +1,27 @@
+# @package _group_
+_target_: mbrl.models.VBLLEnsemble
+ensemble_size: 1
+device: ${device}
+propagation_method: random_model
+clip_val: 
+no_thompson_heads: 25 # if 0, then no thompson sampling, if > 0, then thompson sampling with that many heads
+
+member_cfg:
+  _target_: mbrl.models.VBLLMLP
+  device: ${device}
+  in_size: ???
+  out_size: ???
+  deterministic: false
+  recursive_num_epochs: 0
+  
+  activation_fn_cfg:
+    _target_: torch.nn.ELU
+
+  num_layers: 4
+  hid_size: 200
+  feature_dim: 50
+  regularization_weight_factor: 1
+  parameterization: "dense_precision"
+  cov_rank: 1 
+  prior_scale: 1.
+  wishart_scale: 0.1

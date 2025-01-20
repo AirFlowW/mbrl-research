@@ -5,6 +5,7 @@
 from .basic_ensemble import BasicEnsemble
 from .gaussian_mlp import GaussianMLP
 from .vbll_mlp import VBLLMLP
+from .vbll_ensemble import VBLLEnsemble
 from .model import Ensemble, Model
 from .model_env import ModelEnv
 from .model_trainer import ModelTrainer
