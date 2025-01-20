@@ -12,8 +12,6 @@ import torch
 
 import mbrl.constants
 import mbrl.models
-from mbrl.models.vbll_mlp import VBLLMLP
-from mbrl.models.basic_ensemble import BasicEnsemble
 import mbrl.planning
 import mbrl.types
 import mbrl.util
@@ -34,6 +32,7 @@ def train(
     # ------------------- Initialization -------------------
     debug_mode = cfg.get("debug_mode", False)
     is_vbll_dynamics_model = mbrl.util.checks.is_VBLL_dynamics_model(cfg)
+    is_thompson_sampling_enabled = mbrl.util.checks.is_thompson_sampling_active(cfg)
 
     # model specific context
     if is_vbll_dynamics_model:
@@ -141,6 +140,9 @@ def train(
                 logger.upload_model(cfg.overrides.env, dynamics_model, env_steps+1)
 
             # --- Doing env step using the agent and adding to model dataset ---
+            if is_thompson_sampling_enabled:
+                dynamics_model.model.set_thompson_sampling_active()
+                
             (
                 next_obs,
                 reward,
@@ -150,6 +152,9 @@ def train(
             ) = mbrl.util.common.step_env_and_add_to_buffer(
                 env, obs, agent, {}, replay_buffer
             )
+
+            if is_thompson_sampling_enabled:
+                dynamics_model.model.set_thompson_sampling_inactive()
 
             obs = next_obs
             total_reward += reward
