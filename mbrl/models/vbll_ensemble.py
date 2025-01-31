@@ -144,8 +144,8 @@ class VBLLEnsemble(BasicEnsemble):
             else:
                 thompson_head_weights.append(member.out_layer.create_thompson_heads(no_thompson_heads))
         
-        flattened_tensors = [tensor for sublist in thompson_head_weights for tensor in sublist]
-        thompson_heads = torch.stack(flattened_tensors, dim=0).permute(0, 2, 1)
+        flattened_tensors = [torch.transpose(tensor, 0, 1) for sublist in thompson_head_weights for tensor in sublist]
+        thompson_heads = torch.stack(flattened_tensors, dim=0)
         thompson_heads = EnsembleLinearLayer(self.ensemble_size*no_thompson_heads, thompson_heads.shape[1], thompson_heads.shape[2], bias=False, weights=thompson_heads)
         return thompson_heads
 
@@ -204,7 +204,7 @@ class VBLLEnsemble(BasicEnsemble):
             mean = mean.view(x.shape[1], -1)
             # invert shuffle
             mean[model_indices_features] = mean.clone()
-            return mean
+            return mean, None
 
         elif self.propagation_method == "all_thompson_heads":
             x = x.unsqueeze(0)
@@ -215,7 +215,7 @@ class VBLLEnsemble(BasicEnsemble):
             out = out.unsqueeze(0)
             out = out.repeat(self.no_thompson_heads, 1, 1)
             mean = self.thompson_heads(out)
-            return mean
+            return mean, None
 
         else:
             raise NotImplementedError(
