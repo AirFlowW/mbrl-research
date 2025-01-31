@@ -1,0 +1,46 @@
+overrides:
+  env: "cartpole_continuous"
+  learned_rewards: false
+  num_elites: 0
+  recursive_update: 0 # 0 -> no recursive updates, 1 -> recursive updates always with recursive_num_epochs (in member_cfg) epochs, 2 -> recursive_num_epochs as upper limit but finds no of epochs automatically
+  no_recursive_update_data: 5 # (int) number of data points to use for recursive updates.
+  no_recursive_update_eval_data: 2500
+
+algorithm:
+  _target_: mbrl.algorithms.PETS
+  learned_rewards: ${overrides.learned_rewards}
+  normalize: true
+  normalize_double_precision: true
+  target_is_delta: true
+
+dynamics_model:
+  _target_: mbrl.models.VBLLEnsemble
+  ensemble_size: 1
+  device: ${device}
+  propagation_method: random_model
+  clip_val: 
+  no_thompson_heads: 1
+
+  member_cfg:
+    _target_: mbrl.models.VBLLMLP
+    device: ${device}
+    in_size: ???
+    out_size: ???
+    deterministic: false
+    recursive_num_epochs: 0
+    
+    activation_fn_cfg:
+      _target_: torch.nn.ELU
+
+    num_layers: 4
+    hid_size: 200
+    feature_dim: 50
+    regularization_weight_factor: 1
+    parameterization: "dense" 
+    cov_rank: 1 
+    prior_scale: 1.
+    wishart_scale: 0.1
+
+seed: 0
+device: "cpu"
+use_thompson_sampling: false
