@@ -436,6 +436,7 @@ def rollout_model_env(
     plan: Optional[np.ndarray] = None,
     agent: Optional[mbrl.planning.Agent] = None,
     num_samples: int = 1,
+    sample: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Rolls out an environment model.
 
@@ -458,13 +459,13 @@ def rollout_model_env(
     obs_history = []
     reward_history = []
     if agent:
-        plan = agent.plan(initial_obs[None, :])
+        plan = agent.plan(initial_obs)
     initial_obs = np.tile(initial_obs, (num_samples, 1))
     model_state = model_env.reset(initial_obs, return_as_np=True)
     obs_history.append(initial_obs)
     for action in plan:
         next_obs, reward, done, model_state = model_env.step(
-            np.tile(action, (num_samples, 1)), model_state, sample=False
+            np.tile(action, (num_samples, 1)), model_state, sample=sample
         )
         obs_history.append(next_obs)
         reward_history.append(reward)
