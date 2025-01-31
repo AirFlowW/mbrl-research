@@ -57,6 +57,12 @@ class CartPoleEnv(gym.Env):
 
         self.steps_beyond_terminated = None
 
+    def get_state(self):
+        return self.state, self.steps_beyond_terminated
+    
+    def set_state(self, state):
+        self.state, self.steps_beyond_terminated = state
+
     def step(self, action):
         action = action.squeeze()
         x, x_dot, theta, theta_dot = self.state

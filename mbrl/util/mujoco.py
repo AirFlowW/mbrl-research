@@ -20,6 +20,9 @@ def _is_mujoco_gym_env(env: gym.wrappers.TimeLimit) -> bool:
         "mbrl.env." in class_module and hasattr(env.env, "data")
     )
 
+def _is_cartpole_cont_env(env: gym.wrappers.TimeLimit) -> bool:
+    class_module = env.unwrapped.__class__.__module__
+    return "mbrl.env.cartpole_continuous" in class_module
 
 class FreezeMujoco(Freeze):
     """Provides a context to freeze a Mujoco environment.
@@ -49,19 +52,25 @@ class FreezeMujoco(Freeze):
         self._elapsed_steps = 0
         self._step_count = 0
 
-        if not _is_mujoco_gym_env(env):
+        if not (_is_mujoco_gym_env(env) or _is_cartpole_cont_env(env)):
             raise RuntimeError(f"Tried to freeze an unsupported environment {env}")
 
     def __enter__(self):
-        self._init_state = (
-            self._env.env.data.qpos.ravel().copy(),
-            self._env.env.data.qvel.ravel().copy(),
-        )
-        self._elapsed_steps = self._env._elapsed_steps
+        if _is_cartpole_cont_env(self._env):
+            self._init_state = self._env.get_state()
+        else:
+            self._init_state = (
+                self._env.env.data.qpos.ravel().copy(),
+                self._env.env.data.qvel.ravel().copy(),
+            )
+            self._elapsed_steps = self._env._elapsed_steps
 
     def __exit__(self, *_args):
-        self._env.set_state(*self._init_state)
-        self._env._elapsed_steps = self._elapsed_steps
+        if _is_cartpole_cont_env(self._env):
+            self._env.set_state(self._init_state)
+        else:
+            self._env.set_state(*self._init_state)
+            self._env._elapsed_steps = self._elapsed_steps
 
 
 class MujocoEnvHandler(EnvHandler):
