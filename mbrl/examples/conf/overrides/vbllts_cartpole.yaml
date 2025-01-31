@@ -2,8 +2,12 @@
 env: "cartpole_continuous"
 learned_rewards: false
 trial_length: 200
-num_steps: 2000
+num_steps: 5000
 freq_log_model: 400
+
+recursive_update: 2 # 0 -> no recursive updates, 1 -> recursive updates always with recursive_num_epochs (in member_cfg) epochs, 2 -> recursive_num_epochs as upper limit but finds no of epochs automatically
+no_recursive_update_data: 5 # (int) number of data points to use for recursive updates.
+no_recursive_update_eval_data: 2500
 
 num_elites: 5
 model_lr: 7.5e-4
