@@ -1,0 +1,42 @@
+viz_members: true
+dataset_size: 512
+
+dynamics_model:
+  _target_: mbrl.models.VBLLEnsemble
+  ensemble_size: 1
+  device: ${device}
+  propagation_method: random_model
+  clip_val: 1
+  no_thompson_heads: 25
+
+  member_cfg:
+    _target_: mbrl.models.VBLLMLP
+    device: ${device}
+    in_size: 1
+    out_size: 1
+    deterministic: false
+    
+    activation_fn_cfg:
+      _target_: torch.nn.ELU
+
+    num_layers: 4
+    hid_size: 200
+    feature_dim: 64
+    regularization_weight_factor: 1
+    parameterization: "dense" 
+    cov_rank: 1 
+    prior_scale: 1.
+    wishart_scale: .1
+
+seed: 0
+device: "cpu"
+
+experiment: default
+
+root_dir: "./exp"
+hydra:
+  run:
+    dir: ${root_dir}/${experiment}/plots_test_data/${now:%Y.%m.%d}/${now:%H%M%S}
+
+  sweep:
+    dir: ${root_dir}/${experiment}/plots_test_data/${now:%Y.%m.%d}/${now:%H%M%S}

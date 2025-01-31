@@ -1,0 +1,29 @@
+viz_members: False
+dataset_size: 512
+
+dynamics_model:
+  _target_: mbrl.models.GaussianMLP
+  device: ${device}
+  num_layers: 4
+  in_size: 1
+  out_size: 1
+  ensemble_size: 5
+  hid_size: 200
+  deterministic: false
+  propagation_method: random_model
+  learn_logvar_bounds: false
+  activation_fn_cfg:
+    _target_: torch.nn.SiLU
+
+seed: 0
+device: "cpu"
+
+experiment: default
+
+root_dir: "./exp"
+hydra:
+  run:
+    dir: ${root_dir}/${experiment}/plots_test_data/${now:%Y.%m.%d}/${now:%H%M%S}
+
+  sweep:
+    dir: ${root_dir}/${experiment}/plots_test_data/${now:%Y.%m.%d}/${now:%H%M%S}
