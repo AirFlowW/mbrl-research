@@ -38,7 +38,7 @@ def run(cfg: omegaconf.DictConfig):
     # ---- end init
 
     model = hydra.utils.instantiate(cfg.dynamics_model)
-    if is_VBLL_dynamics_model:
+    if is_VBLL_dynamics_model(cfg):
         for member in model.members:
             member.update_regularization_weight_from_dataset_length(dataset_size)
 
@@ -66,8 +66,8 @@ def run(cfg: omegaconf.DictConfig):
         model.train()
 
         for _, (x, y) in enumerate(dataloader):
-            x_sequence = [x.clone() for _ in range(len(model))]
-            y_sequence = [y.clone() for _ in range(len(model))]
+            x_sequence = torch.stack([x.clone() for _ in range(len(model))])
+            y_sequence = torch.stack([y.clone() for _ in range(len(model))])
             model.update(x_sequence, optimizer, target = y_sequence)
 
     end = time.perf_counter()
