@@ -13,6 +13,8 @@ import numpy as np
 import torch
 
 import mbrl
+from mbrl.diagnostics.test_data.utils.seed import set_seed
+from mbrl.diagnostics.vis_rollout import visualize_data
 import mbrl.models
 import mbrl.planning
 import mbrl.util.common
@@ -46,6 +48,8 @@ class Visualizer:
                 model_subdir = "models/VBLL"
             elif self.cfg.dynamics_model._target_ == "mbrl.models.GaussianMLP":
                 model_subdir = "models/PE"
+            elif self.cfg.dynamics_model._target_ == "mbrl.models.VBLLEnsemble":
+                model_subdir = "models/VBLL-integrated"
 
         if model_subdir:
             model_subdir +=  f"/{self.cfg.overrides.env}"
@@ -73,6 +77,8 @@ class Visualizer:
             self.env.action_space.shape,
             model_dir=self.model_path,
         )
+        if self.cfg.get("use_thompson_sampling", False):
+            self.dynamics_model.model.set_thompson_sampling_active()
         self.model_env = mbrl.models.ModelEnv(
             self.env,
             self.dynamics_model,
@@ -90,7 +96,7 @@ class Visualizer:
                 agent_cfg.algorithm.agent._target_
                 == "mbrl.planning.TrajectoryOptimizerAgent"
             ):
-                agent_cfg.algorithm.agent.planning_horizon = lookahead
+                agent_cfg.algorithm.agent.planning_horizon = lookahead # i dont like this
                 self.agent = mbrl.planning.create_trajectory_optim_agent_for_model(
                     self.model_env,
                     agent_cfg.algorithm.agent,
@@ -110,7 +116,7 @@ class Visualizer:
         self.total_reward = 0
 
     def get_obs_rewards_and_actions(
-        self, obs: np.ndarray, use_mpc: bool = False
+        self, obs: np.ndarray, use_mpc: bool = False, sample: bool = False
     ) -> VisData:
         if use_mpc:
             # When using MPC, rollout model trajectories to see the controller actions
@@ -120,6 +126,7 @@ class Visualizer:
                 plan=None,
                 agent=self.agent,
                 num_samples=self.num_model_samples,
+                sample=sample
             )
             # Then evaluate in the environment
             real_obses, real_rewards, _ = self.handler.rollout_env(
@@ -144,16 +151,17 @@ class Visualizer:
                 agent=None,
                 plan=actions,
                 num_samples=self.num_model_samples,
+                sample=sample
             )
         return real_obses, real_rewards, model_obses, model_rewards, actions
 
-    def vis_rollout(self, use_mpc: bool = False) -> Generator:
+    def vis_rollout(self, use_mpc: bool = False, sample: bool = False) -> Generator:
         obs, _ = self.env.reset()
         terminated = False
         truncated = False
         i = 0
         while not terminated and not truncated:
-            vis_data = self.get_obs_rewards_and_actions(obs, use_mpc=use_mpc)
+            vis_data = self.get_obs_rewards_and_actions(obs, use_mpc=use_mpc, sample=sample)
             action = vis_data[-1][0]
             next_obs, reward, terminated, truncated, _ = self.env.step(action)
             self.total_reward += reward
@@ -257,21 +265,41 @@ class Visualizer:
         self.axs = axs
         self.lines = lines
 
-    def run(self, use_mpc: bool):
-        self.create_axes()
-        ani = animation.FuncAnimation(
-            self.fig,
-            self.plot_func,
-            frames=lambda: self.vis_rollout(use_mpc=use_mpc),
-            blit=True,
-            interval=100,
-            save_count=self.num_steps,
-            repeat=False,
-        )
-        save_path = self.vis_path / f"rollout_{type(self.agent).__name__}_policy.mp4"
-        ani.save(save_path, writer=self.writer)
-        print(f"Video saved at {save_path}.")
-        print(f"Total rewards obtained was: {self.total_reward}.")
+    def run(self, use_mpc: bool, sample: bool = False, animation_enabled: bool = True):
+        if animation_enabled:
+            self.create_axes()
+            ani = animation.FuncAnimation(
+                self.fig,
+                self.plot_func,
+                frames=lambda: self.vis_rollout(use_mpc=use_mpc, sample=sample),
+                blit=True,
+                interval=100,
+                save_count=self.num_steps,
+                repeat=False,
+            )
+            save_path = self.vis_path / f"rollout_{type(self.agent).__name__}_policy.mp4"
+            ani.save(save_path, writer=self.writer)
+            print(f"Video saved at {save_path}.")
+            print(f"Total rewards obtained was: {self.total_reward}.")
+            return 
+
+        data = None # real_obses, real_rewards, model_obses, model_rewards, actions
+        for vis_data in self.vis_rollout(use_mpc, sample):
+            data = vis_data
+            break # stop generator - do not want to take real actions
+
+        # convert into right format
+        real_obses, real_rewards, model_obses, model_rewards, actions = data
+        real_obses = np.expand_dims(real_obses, axis=0)
+        model_obses = np.transpose(model_obses, (1, 0, 2))
+        model_obses = np.expand_dims(model_obses, axis=0)
+        real_rewards = np.expand_dims(real_rewards, axis=0)
+        model_rewards = np.squeeze(model_rewards)
+        model_rewards = np.transpose(model_rewards, (1,0))
+        model_rewards = np.expand_dims(model_rewards, axis=0)
+        data = real_obses, real_rewards, model_obses, model_rewards, actions
+        # ---
+        visualize_data(data, self.vis_path, "Rollout_viz.png")
 
 
 if __name__ == "__main__":
@@ -283,6 +311,8 @@ if __name__ == "__main__":
         help="The directory where the original experiment was run.",
     )
     parser.add_argument("--lookahead", type=int, default=25)
+    # parser.add_argument("--sampleee", type=int, default=0) somehow it does not work
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--agent_dir",
         type=str,
@@ -311,7 +341,9 @@ if __name__ == "__main__":
             "Default None means the cfg file is assumed to be in results_dir/.hydra/config.yaml.",
     )
     args = parser.parse_args()
-
+    print(args.seed)
+    print("args.seed")
+    set_seed(args.seed)
     visualizer = Visualizer(
         lookahead=args.lookahead,
         results_dir=args.experiments_dir,
@@ -322,4 +354,4 @@ if __name__ == "__main__":
         cfg_file_path=args.cfg_file_path,
     )
     use_mpc = isinstance(visualizer.agent, mbrl.planning.TrajectoryOptimizerAgent)
-    visualizer.run(use_mpc=use_mpc)
+    visualizer.run(use_mpc=use_mpc, sample=True, animation_enabled = False)
