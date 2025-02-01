@@ -260,7 +260,7 @@ class ModelTrainer:
                 and 'dense_precision' == cfg.dynamics_model.member_cfg.get("parameterization", 'False')):
             return None
         
-        if checks.is_VBLL_thompson_dynamics_model(cfg):
+        if checks.is_thompson_sampling_active(cfg):
             self.model.model.reset_thompson_mlps()
         
         recursive_updates_list = np.array([])
