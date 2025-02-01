@@ -234,12 +234,26 @@ class VBLLEnsemble(BasicEnsemble):
         while not isinstance(ensemble_layer, EnsembleLinearLayer):
             ensemble_layer = ensemble_layer[0]
         num_models = ensemble_layer.num_members
-        shuffled_x = x[:, model_shuffle_indices, ...].view(
-            num_models, batch_size // num_models, -1
+
+        # extend x to be a multiple of num models
+        not_aligns = bool(batch_size % num_models)
+        num_fill_tensors = num_models - (batch_size % num_models) if not_aligns else 0
+        reference_tensor = x[:,0,:].unsqueeze(dim=1)
+        zero_tensors = torch.cat([torch.zeros_like(reference_tensor) for _ in range(num_fill_tensors)], dim=1)
+
+        x_extended = torch.cat([x, zero_tensors], dim=1)
+        start_value_for_extending = len(model_shuffle_indices)
+        new_values = torch.arange(start_value_for_extending, start_value_for_extending + num_fill_tensors)
+        model_shuffle_indices_extended = torch.cat([model_shuffle_indices,new_values])
+
+        shuffled_x = x_extended[:, model_shuffle_indices_extended, ...].view(
+            num_models, (batch_size // num_models) + not_aligns, -1
         )
 
         out = model(shuffled_x)
-        out = out.view(batch_size, -1)
+        out = out.view(batch_size + num_fill_tensors, -1)
+        out = out[:-num_fill_tensors,:]
+
         # note that out is shuffled and in view of EnsembleLinearLayer
         if invert_shuffle:
             out[model_shuffle_indices] = out.clone()  # invert the shuffle
