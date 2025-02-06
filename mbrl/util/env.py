@@ -96,6 +96,19 @@ def _legacy_make_env(
             env = mbrl.env.mujoco_envs.HumanoidTruncatedObsEnv()
             term_fn = mbrl.env.termination_fns.humanoid
             reward_fn = None
+        elif cfg.overrides.env == "env_with_measurement_noise":
+            noise_var = cfg.overrides.get("noise_var", 1)
+            noise_std = np.sqrt(noise_var)
+
+            cfg_dict = omegaconf.OmegaConf.to_container(cfg, resolve=True)  
+            if "underlying_env" in cfg_dict["overrides"]:
+                cfg_dict["overrides"]["env"] = cfg_dict["overrides"]["underlying_env"]
+            cfg_dict["overrides"].pop("underlying_env", None)
+            cfg_dict["overrides"].pop("noise_var", None)
+            cfg = omegaconf.OmegaConf.create(cfg_dict)
+
+            env, term_fn, reward_fn = EnvHandler.make_env(cfg)
+            env = mbrl.env.env_with_measurement_noise.EnvWithMeasurementNoise(noise_std, env)
         else:
             raise ValueError("Invalid environment string.")
         env = gym.wrappers.TimeLimit(
