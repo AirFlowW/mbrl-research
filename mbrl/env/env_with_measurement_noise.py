@@ -18,7 +18,7 @@ class EnvWithMeasurementNoise(gym.Env):
 
     def step(self, *args, **kwargs):
         result = self.env.step(*args, **kwargs)
-        result[0] = add_noise_to_state(result[0], self.noise_std_dev)
+        result = (add_noise_to_state(result[0], self.noise_std_dev),) + result[1:]
         return result
 
     def reset(self, *args, **kwargs):
