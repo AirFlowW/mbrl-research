@@ -185,7 +185,7 @@ def train(
                     {"env_step": env_steps, "step_reward": reward},
                 )
                 if is_vbll_dynamics_model:
-                    avg_recursive_update = np.mean(recursive_updates_list) if recursive_updates_list else 0
+                    avg_recursive_update = np.mean(recursive_updates_list) if recursive_updates_list is not None and len(recursive_updates_list) > 0 else 0
                     logger.log_data(
                         mbrl.constants.VBLL_LOG_NAME,
                         {"avg_no_recursive_updates": avg_recursive_update},
