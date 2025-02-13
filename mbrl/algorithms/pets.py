@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
+import time
 from typing import Optional
 
 import gymnasium as gym
@@ -15,6 +16,7 @@ import mbrl.models
 import mbrl.planning
 import mbrl.types
 import mbrl.util
+from mbrl.util import time_keeping
 import mbrl.util.common
 import mbrl.util.math
 
@@ -30,6 +32,7 @@ def train(
     work_dir: Optional[str] = None,
 ) -> np.float32:
     # ------------------- Initialization -------------------
+    start_overall_runtime = time.time()
     debug_mode = cfg.get("debug_mode", False)
     is_vbll_dynamics_model = mbrl.util.checks.is_VBLL_dynamics_model(cfg)
     is_thompson_sampling_enabled = mbrl.util.checks.is_thompson_sampling_active(cfg)
@@ -58,6 +61,9 @@ def train(
             logger = mbrl.util.Logger(work_dir)
         logger.register_group(
             mbrl.constants.RESULTS_LOG_NAME, EVAL_LOG_FORMAT, color="green"
+        )
+        logger.register_group(
+            mbrl.constants.OVERALL_LOG_NAME, mbrl.constants.OVERALL_LOG_FORMAT , color="green"
         )
         logger.register_group(
             mbrl.constants.STEP_LOG_NAME, mbrl.constants.STEP_LOG_FORMAT, color="yellow"
@@ -182,7 +188,7 @@ def train(
             if logger is not None:
                 logger.log_data(
                     mbrl.constants.STEP_LOG_NAME,
-                    {"env_step": env_steps, "step_reward": reward},
+                    {"env_step": env_steps, "planning_time": time_keeping.last_planning_time, "step_reward": reward},
                 )
                 if is_vbll_dynamics_model:
                     avg_recursive_update = np.mean(recursive_updates_list) if recursive_updates_list is not None and len(recursive_updates_list) > 0 else 0
@@ -200,5 +206,8 @@ def train(
             )
         
         max_total_reward = max(max_total_reward, total_reward)
-
+    logger.log_data(
+        mbrl.constants.OVERALL_LOG_NAME,
+        {"planning_time":time_keeping.accumulated_planning_time, "train_time": model_trainer.train_time, "recursive_train_time":model_trainer.recursive_train_time, "overall_time": time.time() - start_overall_runtime},
+    )
     return np.float32(max_total_reward)

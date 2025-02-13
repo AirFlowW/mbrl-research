@@ -11,10 +11,19 @@ EVAL_LOG_FORMAT = [
     ("episode_reward", "R", "float"),
 ]
 
+OVERALL_LOG_NAME = "overall"
+OVERALL_LOG_FORMAT = [
+    ("planning_time", "Ptime", "float"),
+    ("train_time", "Ttime", "float"),
+    ("recursive_train_time", "Rtime", "float"),
+    ("overall_time", "Otime", "float"),
+]
+
 STEP_LOG_NAME = "step"
 
 STEP_LOG_FORMAT = [
     ("env_step", "GS", "int"),
+    ("planning_time", "PT", "float"),
     ("step_reward", "R", "float"),
 ]
 
@@ -32,6 +41,12 @@ MODEL_LOG_FORMAT = [
     ("model_loss", "MLOSS", "float"),
     ("model_val_score", "MVSCORE", "float"),
     ("model_best_val_score", "MBVSCORE", "float"),
+    ("train_time", "Ttime", "float"),
+]
+
+RECURSIVE_LOG_NAME = "model_train_recursive"
+RECURSIVE_LOG_FORMAT = [
+    ("recursive_train_time", "Rtime", "float"),
 ]
 
 TRAIN_LOG_GROUP_NAME_VBLL_EXTENSION = "model_train_validation_vbll_extension"

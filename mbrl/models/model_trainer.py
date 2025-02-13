@@ -5,6 +5,7 @@
 import copy
 import functools
 import itertools
+import time
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -13,8 +14,6 @@ import tqdm
 from torch import optim as optim
 
 from mbrl import constants
-from mbrl.models.basic_ensemble import BasicEnsemble
-from mbrl.models.vbll_mlp import VBLLMLP
 import mbrl.util.checks as checks
 from mbrl.util.logger import Logger
 from mbrl.util.replay_buffer import BootstrapIterator, TransitionIterator
@@ -48,6 +47,9 @@ class ModelTrainer:
     ):
         self.model = model
         self._train_iteration = 0
+        self.train_time = 0
+        self.recursive_train_time = 0
+        self.is_vbll_dynamics_model = checks.is_VBLL_dynamics_model(self.model)
 
         self.logger = logger
         if self.logger:
@@ -57,10 +59,16 @@ class ModelTrainer:
                 color="blue",
                 dump_frequency=1,
             )
-            if isinstance(self.model.model, BasicEnsemble) and isinstance(self.model.model.members[0], VBLLMLP):
+            if self.is_vbll_dynamics_model:
                 self.logger.register_group(
                     self._LOG_GROUP_NAME_VBLL_EXTENSION,
                     MODEL_LOG_FORMAT_VBLL_EXTENSION,
+                    color="blue",
+                    dump_frequency=1,
+                )
+                self.logger.register_group(
+                    constants.RECURSIVE_LOG_NAME,
+                    constants.RECURSIVE_LOG_FORMAT,
                     color="blue",
                     dump_frequency=1,
                 )
@@ -155,6 +163,7 @@ class ModelTrainer:
         disable_tqdm = silent or (num_epochs is None or num_epochs > 1)
         eval_meta_list = []
 
+        start_time = time.time()
         for epoch in epoch_iter:
             if batch_callback:
                 batch_callback_epoch = functools.partial(batch_callback, epoch)
@@ -190,6 +199,11 @@ class ModelTrainer:
                 model_val_score = eval_score.mean()
 
             if self.logger and not silent:
+                if num_epochs and num_epochs - 1 == epoch:
+                    train_time = time.time() - start_time
+                else:
+                    train_time = 0
+
                 self.logger.log_data(
                     self._LOG_GROUP_NAME,
                     {
@@ -204,6 +218,7 @@ class ModelTrainer:
                         "model_best_val_score": best_val_score.mean()
                         if best_val_score is not None
                         else 0,
+                        "train_time": train_time,
                     },
                 )
             if callback:
@@ -218,11 +233,13 @@ class ModelTrainer:
 
             if patience and epochs_since_update >= patience:
                 break
+        
+        self.train_time += train_time
 
         # saving the best models:
         if evaluate:
             self._maybe_set_best_weights_and_elite(best_weights, best_val_score)
-        if self.logger and isinstance(self.model.model, BasicEnsemble) and isinstance(self.model.model.members[0], VBLLMLP):
+        if self.logger and self.is_vbll_dynamics_model:
             VBLL_val_loss_tensor = torch.tensor([entry['VBLL_val_loss'] for entry in eval_meta_list])
             NLL_tensor = torch.tensor([entry['NLL'] for entry in eval_meta_list])
             MSE_tensor = torch.tensor([entry['MSE'] for entry in eval_meta_list])
@@ -263,6 +280,7 @@ class ModelTrainer:
         if checks.is_thompson_sampling_active(cfg):
             self.model.model.reset_thompson_mlps()
         
+        start_time = time.time()
         recursive_updates_list = np.array([])
         recursive_update_model_in, recursive_update_target = self.model._process_batch(update_transition_batch)
         eval_transition_batch.add_transition_batch(update_transition_batch)
@@ -273,6 +291,13 @@ class ModelTrainer:
                 recursive_updates = member.train_recursively(recursive_update_model_in, 
                         recursive_update_target, eval_model_in, eval_target, mode=mode)
                 recursive_updates_list = np.append(recursive_updates_list, recursive_updates)
+        train_time = time.time() - start_time
+        self.recursive_train_time += train_time
+        if self.logger and self.is_vbll_dynamics_model:
+            self.logger.log_data(
+                    self._LOG_GROUP_NAME_VBLL_EXTENSION,
+                    {"recursive_train_time": train_time},
+                )
         return recursive_updates_list
 
     def evaluate(
