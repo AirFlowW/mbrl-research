@@ -212,6 +212,7 @@ class OneDTransitionRewardModel(Model):
         self,
         batch: mbrl.types.TransitionBatch,
         target: Optional[torch.Tensor] = None,
+        uncertainty = False
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Evaluates the model score over a batch of transitions.
 
@@ -220,6 +221,7 @@ class OneDTransitionRewardModel(Model):
 
         Args:
             batch (transition batch): a batch of transition to train the model.
+            uncertainty (bool): if True, the uncertainty of the model will be evaluated.
 
         Returns:
             (tensor): as returned by `model.eval_score().`
@@ -227,7 +229,7 @@ class OneDTransitionRewardModel(Model):
         assert target is None
         with torch.no_grad():
             model_in, target = self._process_batch(batch)
-            return self.model.eval_score(model_in, target=target)
+            return self.model.eval_score(model_in, target=target, uncertainty = uncertainty)
 
     def get_output_and_targets(
         self, batch: mbrl.types.TransitionBatch

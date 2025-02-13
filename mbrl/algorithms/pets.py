@@ -89,6 +89,9 @@ def train(
     )
     replay_buffer.save(work_dir)
 
+    env_data_for_analysis = {}
+    env_data_for_analysis["initial_data"] = replay_buffer.get_all()
+
     # ---------------------------------------------------------
     # ---------- Create model environment and agent -----------
     model_env = mbrl.models.ModelEnv(
@@ -169,6 +172,12 @@ def train(
                     replay_buffer.sample(cfg.overrides.get("no_recursive_update_eval_data", 2500)),
                     mode = cfg.overrides.get("recursive_update", 0)
                     )
+
+            if env_steps % cfg.overrides.get("track_uncertainty_freq", 250) == 1 and cfg.logger == "wandb":    
+                env_data_for_analysis["last_data"] = replay_buffer.get_last_n_samples(n=cfg.overrides.trial_length)
+                for key, batch in env_data_for_analysis.items():
+                    _, meta = dynamics_model.eval_score(batch, uncertainty=True)
+                    logger.log_uncertainty(meta["uncertainty"], key)
 
             if logger is not None:
                 logger.log_data(

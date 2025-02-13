@@ -184,7 +184,7 @@ class VBLLMLP(Model):
         return 0
         
     def eval_score(  # type: ignore
-        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None
+        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None, uncertainty = False
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Computes the negative log likelihood of the target given the input.
         """
@@ -196,7 +196,41 @@ class VBLLMLP(Model):
             VBLL_val_loss_non_reduced = -out.predictive.log_prob(target) # same validation score as the val_loss_fn but non_reduced
             nll = util.math.gaussian_nll(pred_mean, pred_logvar, target, reduce=False)
             loss = nn.MSELoss(reduction="none")
-            return VBLL_val_loss_non_reduced, {"NLL": nll.mean(), "VBLL_val_loss": VBLL_val_loss, "MSE": loss(pred_mean, target).mean(), "VBLL_train_loss": VBLL_train_loss}
+            meta = {"NLL": nll.mean(), "VBLL_val_loss": VBLL_val_loss, "MSE": loss(pred_mean, target).mean(), "VBLL_train_loss": VBLL_train_loss}
+
+            if uncertainty:
+                batch_size, obs_dim = pred_mean.shape
+                var = out.predictive.var
+                overall_var = var
+
+                aleatoric_var = self.get_aleatoric_var() # obs_dim - homoscedastic
+                aleatoric_var_expanded = torch.unsqueeze(aleatoric_var, 0)
+                aleatoric_var_expanded = aleatoric_var_expanded.expand(batch_size, obs_dim)
+
+                epistemic_var = overall_var - aleatoric_var
+
+                mean_gap = torch.abs(target - pred_mean)
+
+                uncertainty = {}
+                uncertainty["mean_aleatoric_var"] = aleatoric_var
+                uncertainty["max_aleatoric"] = aleatoric_var
+                uncertainty["min_aleatoric"] = aleatoric_var
+                uncertainty["mean_epistemic_var"] = epistemic_var
+                uncertainty["max_epistemic_var"] = epistemic_var
+                uncertainty["min_epistemic_var"] = epistemic_var
+                uncertainty["mean_variance"] = overall_var
+                uncertainty["predicted_mean"] = pred_mean
+                uncertainty["mean_gap_to_real_state"] = mean_gap
+                uncertainty["gap_subtracted_aleatoric"] = mean_gap - aleatoric_var
+                uncertainty["gap_subtracted_epistemic_var"] = mean_gap - epistemic_var
+                uncertainty["gap_subtracted_variance"] = mean_gap - overall_var
+                uncertainty["nll"] = nll
+                meta["uncertainty"] = uncertainty
+                
+            return VBLL_val_loss_non_reduced, meta
+        
+    def get_aleatoric_var(self):
+        return torch.exp(self.out_layer.noise_logdiag)
         
     def update_regularization_weight_from_dataset_length(self,dataset_length: int):
         self.out_layer.regularization_weight = self.regularization_weight_factor/dataset_length

@@ -100,7 +100,7 @@ class Model(nn.Module, abc.ABC):
 
     @abc.abstractmethod
     def eval_score(
-        self, model_in: ModelInput, target: Optional[torch.Tensor] = None
+        self, model_in: ModelInput, target: Optional[torch.Tensor] = None, uncertainty = False
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Computes an evaluation score for the model over the given input/target.
 
@@ -119,6 +119,7 @@ class Model(nn.Module, abc.ABC):
             model_in (tensor or batch of transitions): the inputs to the model.
             target (tensor or sequence of tensors): the expected output for the given inputs, if it
                 cannot be computed from ``model_in``.
+            uncertainty (bool): if ``True``, the uncertainty of the model will be evaluated.
 
         Returns:
             (tuple of tensor and optional dict): a non-reduced tensor score, and a dictionary

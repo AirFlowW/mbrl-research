@@ -281,3 +281,48 @@ class VBLLEnsemble(BasicEnsemble):
     ) -> Tuple[float, Dict[str, Any]]:
         self.reset_thompson_mlps()
         return super().update(model_in, optimizer, target)
+
+    def eval_score(  # type: ignore
+        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None, uncertainty = False
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        """Computes the average score over all members given input/target.
+
+        The input and target tensors are replicated once for each model in the ensemble.
+
+        Args:
+            model_in (tensor): the inputs to the models.
+            target (tensor): the expected output for the given inputs.
+
+        Returns:
+            (tensor): the average score over all models.
+        """
+        if not uncertainty:
+            return super().eval_score(model_in, target, uncertainty)
+        
+        loss, meta = super().eval_score(model_in, target, uncertainty)
+
+        # extract the uncertainty of each member and put them together
+        uncertainty = [meta[key]["uncertainty"] for key in meta.keys()]
+        uncertainty = {key: torch.stack([item[key] for item in uncertainty]) for key in uncertainty[0].keys()}
+
+        # ensemble var of a combined mixture of gaussians
+        var = uncertainty["mean_variance"]
+        ensemble_mean = torch.mean(uncertainty["predicted_mean"], dim=0)
+        inner = var + torch.pow(uncertainty["predicted_mean"], 2)
+        uncertainty["ensemble_uncertainty"] = torch.mean(inner, dim=0) - torch.pow(ensemble_mean, 2)
+
+        for key, item in uncertainty.items():
+            if not (item.shape[0] == self.num_members and item.dim() > 1):
+                continue
+            if key.startswith("max"):
+                uncertainty[key] = torch.max(item, dim=0)[0]
+            elif key.startswith("min"):
+                uncertainty[key] = torch.min(item, dim=0)[0]
+            else:
+                uncertainty[key] = torch.mean(item, dim=0)
+
+        for _, item in meta.items():
+            del item["uncertainty"]
+        meta["uncertainty"] = uncertainty
+
+        return loss, meta

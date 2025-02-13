@@ -256,7 +256,7 @@ class BasicEnsemble(Ensemble):
         return loss.item(), meta
 
     def eval_score(  # type: ignore
-        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None
+        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None, uncertainty = False
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Computes the average score over all members given input/target.
 
@@ -278,7 +278,7 @@ class BasicEnsemble(Ensemble):
             ensemble_meta = {}
             for i, model in enumerate(self.members):
                 model.eval()
-                score, meta = model.eval_score(inputs[i], targets[i])
+                score, meta = model.eval_score(inputs[i], targets[i], uncertainty)
                 ensemble_meta[f"model_{i}"] = meta
 
                 if score.ndim == 3:

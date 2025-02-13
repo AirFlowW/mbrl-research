@@ -4,10 +4,10 @@ import shutil
 from typing import Mapping, Union
 
 import omegaconf
+import torch
 import wandb
 from mbrl.util.logger import Logger
 from mbrl.util.logger import LogTypes
-from mbrl.util.logger import LogFormatType
 import mbrl.constants as constants
 
 class WANDBLogger(Logger):
@@ -36,6 +36,28 @@ class WANDBLogger(Logger):
     def log_data(self, group_name: str, data: Mapping[str, LogTypes]):
         super().log_data(group_name, data, dump=False)
         wb_data = {f"{group_name}/{key}": value for key, value in data.items()}
+        wandb.log(wb_data)
+
+    def log_uncertainty(self, uncertainty, key):
+        """logs the uncertainty of a model to Weights & Biases.
+        logs for each key the mean, max, min of the dims.
+        in the keys the first mean/max/min means over the model members, the second mean/max/min means over the output dim.
+        'mean_variance_dim_min' - is the mean over the members and the min value of the output dim
+
+        Args:
+            uncertainty (dict): keys - aleatoric_var_mean, max_aleatoric, min_aleatoric, epistemic_var_mean, max_epistemic_var, 
+                min_epistemic_var, log_variance, pred_mean, mean_gap, gap_subtracted_aleatoric,
+                gap_subtracted_epistemic_var, gap_subtracted_overall_var - min max mean means over the model members
+            key (str): either initial_data or last_data as a key so that it gets tracked at the right plot
+        """
+        uncertainty = {k: torch.mean(v, dim=0) if v.dim() > 1 else v for k, v in uncertainty.items()}
+        wb_data = {}
+        for uncertainty_name, value in uncertainty.items():
+            tracking_id = f"uncertainty_{key}/{uncertainty_name}"
+            wb_data[f"{tracking_id}_dim_mean"] = value.mean().item()
+            wb_data[f"{tracking_id}_dim_max"] = value.max().item()
+            wb_data[f"{tracking_id}_dim_min"] = value.min().item()
+
         wandb.log(wb_data)
 
     def upload_model(self, cfg_env_name, dynamics_model, env_steps, remove_after_upload=True):

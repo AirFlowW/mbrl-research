@@ -335,7 +335,7 @@ class GaussianMLP(Ensemble):
             return self._nll_loss(model_in, target), {}
 
     def eval_score(  # type: ignore
-        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None
+        self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None, uncertainty = False
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Computes the squared error for the model over the given input/target.
 
@@ -356,9 +356,41 @@ class GaussianMLP(Ensemble):
         """
         assert model_in.ndim == 2 and target.ndim == 2
         with torch.no_grad():
-            pred_mean, _ = self.forward(model_in, use_propagation=False)
+            pred_mean, pred_logvar = self.forward(model_in, use_propagation=False)
             target = target.repeat((self.num_members, 1, 1))
-            return F.mse_loss(pred_mean, target, reduction="none"), {}
+            meta = {}
+
+            if uncertainty:
+                var = torch.exp(pred_logvar)
+
+                ensemble_mean = torch.mean(pred_mean, dim=0)
+                inner = var + torch.pow(pred_mean, 2)
+                overall_var = torch.mean(inner, dim=0) - torch.pow(ensemble_mean, 2)
+
+                aleatoric_var = var
+                aleatoric_var_mean = torch.mean(aleatoric_var, dim=0)
+
+                epistemic_var = overall_var - aleatoric_var_mean
+
+                mean_gap = torch.abs(torch.mean((target - pred_mean), dim=0))
+                
+                uncertainty = {}
+                uncertainty["mean_aleatoric_var"] = aleatoric_var_mean
+                uncertainty["max_aleatoric"] = torch.max(aleatoric_var, dim=0)[0]
+                uncertainty["min_aleatoric"] = torch.min(aleatoric_var, dim=0)[0]
+                uncertainty["mean_epistemic_var"] = epistemic_var
+                uncertainty["max_epistemic_var"] = epistemic_var
+                uncertainty["min_epistemic_var"] = epistemic_var
+                uncertainty["mean_variance"] = overall_var
+                uncertainty["predicted_mean"] = ensemble_mean
+                uncertainty["mean_gap_to_real_state"] = mean_gap
+                uncertainty["gap_subtracted_aleatoric"] = mean_gap - aleatoric_var_mean
+                uncertainty["gap_subtracted_epistemic_var"] = mean_gap - epistemic_var
+                uncertainty["gap_subtracted_variance"] = mean_gap - overall_var
+                uncertainty["nll"] = mbrl.util.math.gaussian_nll(pred_mean, pred_logvar, target, reduce=False).mean(dim=0)
+                meta["uncertainty"] = uncertainty
+        
+            return F.mse_loss(pred_mean, target, reduction="none"), meta
 
     def sample_propagation_indices(
         self, batch_size: int, _rng: torch.Generator
