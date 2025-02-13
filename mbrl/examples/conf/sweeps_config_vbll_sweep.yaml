@@ -1,0 +1,110 @@
+program: mbrl.examples.main  # not a script to run but a module to run
+
+method: bayes  # grid, random, bayes
+metric:
+  name: results/episode_reward.max  # what to optimize
+  goal: maximize  # maximize / minimize
+
+# hyperparameter to search in - look at example_config.yaml where a cfg of a run was printed
+parameters:
+  # dynamics_model.ensemble_size: 
+  #   values: [3]
+  # dynamics_model.member_cfg.recursive_num_epochs:
+  #   values: [0,1,4,8,16]
+  # overrides.recursive_update:
+  #   values: [2]
+  dynamics_model.member_cfg.num_layers:
+    values: [3,4,5,6]
+  dynamics_model.member_cfg.feature_dim:
+    values: [50,75,100]
+  dynamics_model.member_cfg.regularization_weight_factor:
+    values: [1,5,10,0.5]
+  dynamics_model.member_cfg.prior_scale:
+    values: [1., 0.5, 0.1, 2, 5]
+  dynamics_model.member_cfg.wishart_scale:
+    values: [0.5, 0.1, 0.05, 0.02]
+
+  overrides.freq_train_model:
+    values: [100,200,300]
+  overrides.num_epochs_train_model:
+    values: [25, 50, 100, 150]
+  overrides.patience:
+    values: [25, 50, 10]
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - algorithm=pets
+  - dynamics_model=vbll_mlp_ensemble
+  - overrides=vbllts_hopper
+  - ${args_no_hyphens}
+
+# only in random and grid?:
+# early_terminate: 
+#   type: hyperband  # hyperband, median, none
+#   max_iter: 27  # max iterations
+
+# number of runs in the sweep - only in random?:
+# total_runs: 100  
+
+
+# second sweep:
+
+program: mbrl.examples.main  # not a script to run but a module to run
+
+method: bayes  # grid, random, bayes
+metric:
+  name: results/episode_reward.max  # what to optimize
+  goal: maximize  # maximize / minimize
+
+# hyperparameter to search in - look at example_config.yaml where a cfg of a run was printed
+parameters:
+  dynamics_model.member_cfg.feature_dim:
+    distribution: int_uniform
+    max: 100
+    min: 50
+  dynamics_model.member_cfg.num_layers:
+    distribution: int_uniform
+    max: 8
+    min: 4
+  dynamics_model.member_cfg.prior_scale:
+    distribution: uniform
+    max: 8
+    min: 0.01
+  dynamics_model.member_cfg.regularization_weight_factor:
+    distribution: uniform
+    max: 1
+    min: 0
+  dynamics_model.member_cfg.wishart_scale:
+    distribution: uniform
+    max: 0.75
+    min: 0.02
+  overrides.freq_train_model:
+    distribution: int_uniform
+    max: 500
+    min: 250
+  overrides.num_epochs_train_model:
+    distribution: int_uniform
+    max: 100
+    min: 25
+  overrides.patience:
+    distribution: int_uniform
+    max: 50
+    min: 10
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - algorithm=pets
+  - dynamics_model=vbll_mlp_ensemble
+  - overrides=vbllts_hopper
+  - ${args_no_hyphens}
+
+early_terminate:
+  type: hyperband
+  min_iter: 40
+  eta: 2
