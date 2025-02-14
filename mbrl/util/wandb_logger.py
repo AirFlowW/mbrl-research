@@ -63,15 +63,24 @@ class WANDBLogger(Logger):
         wandb.log(wb_data)
 
     def upload_model(self, cfg_env_name, dynamics_model, env_steps, remove_after_upload=True):
-        wd = os.getcwd()
-        temp_model_dir = f"{wd}/models/step{env_steps}"
-        os.makedirs(temp_model_dir, exist_ok=True)
-        dynamics_model.model.save(temp_model_dir)
-        artifact = wandb.Artifact(f"{cfg_env_name}-{wandb.run.name}-step{env_steps}", type='model')
-        artifact.add_file(f"{temp_model_dir}/model.pth")
-        wandb.log_artifact(artifact)
-        if remove_after_upload:
-            shutil.rmtree(temp_model_dir)
+        try:
+            wd = os.getcwd()
+            temp_model_dir = os.path.join(wd, "models", f"step{env_steps}")
+            os.makedirs(temp_model_dir, exist_ok=True)
+            dynamics_model.model.save(temp_model_dir)
+
+            model_file = os.path.join(temp_model_dir, "model.pth")
+            if not os.path.isfile(model_file):
+                raise Exception(f"Model file {model_file} not found")
+
+            artifact_name = f"{cfg_env_name}-{wandb.run.name}-step{env_steps}"
+            artifact = wandb.Artifact(artifact_name, type='model')
+            artifact.add_file(model_file)
+            wandb.log_artifact(artifact)
+            if remove_after_upload:
+                shutil.rmtree(temp_model_dir)
+        except Exception as e:
+            print(f"Failed to upload model to wandb: {e}")
     
 def define_vbllts_wandb_metrices(): # this mehtod just does not seem to work 
         EVAL_LOG_NAME = constants.RESULTS_LOG_NAME
