@@ -83,8 +83,8 @@ def define_vbllts_wandb_metrices(): # this mehtod just does not seem to work
 
         wandb.define_metric(f"{EVAL_LOG_NAME}/episode")
         wandb.define_metric(f"{EVAL_LOG_NAME}/env_step", step_metric=f"{EVAL_LOG_NAME}/episode")
-        wandb.define_metric(f"{EVAL_LOG_NAME}/episode_reward", step_metric=f"{EVAL_LOG_NAME}/episode", summary="max")
-        wandb.define_metric(f"{EVAL_LOG_NAME}/episode_length", step_metric=f"{EVAL_LOG_NAME}/episode", summary="mean")
+        wandb.define_metric(f"{EVAL_LOG_NAME}/episode_reward", step_metric=f"{EVAL_LOG_NAME}/env_step", summary="max")
+        wandb.define_metric(f"{EVAL_LOG_NAME}/episode_length", step_metric=f"{EVAL_LOG_NAME}/env_step", summary="mean")
         # define model metrices
         wandb.define_metric(f"{MODEL_LOG_NAME}/train_iteration")
         wandb.define_metric(f"{MODEL_LOG_NAME}/epoch")
