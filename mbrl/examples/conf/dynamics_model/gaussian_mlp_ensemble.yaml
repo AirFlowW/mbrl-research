@@ -1,7 +1,7 @@
 # @package _group_
 _target_: mbrl.models.GaussianMLP
 device: ${device}
-num_layers: 4
+num_layers: 6
 in_size: ???
 out_size: ???
 ensemble_size: 7

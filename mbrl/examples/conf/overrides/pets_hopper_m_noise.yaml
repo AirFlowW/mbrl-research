@@ -1,5 +1,8 @@
 # @package _group_
-env: "gym___Hopper-v4"
+env: "env_with_measurement_noise"
+noise_var: 0.1
+
+underlying_env: "gym___Hopper-v4"
 term_fn: "hopper"
 learned_rewards: true
 num_steps: 20000
@@ -14,10 +17,6 @@ validation_ratio: 0
 freq_train_model: 216
 patience: 25
 num_epochs_train_model: 28
-
-recursive_update: 2 # 0 -> no recursive updates, 1 -> recursive updates always with recursive_num_epochs (in member_cfg) epochs, 2 -> recursive_num_epochs as upper limit but finds no of epochs automatically
-no_recursive_update_data: 5 # (int) number of data points to use for recursive updates.
-no_recursive_update_eval_data: 2500
 
 planning_horizon: 30
 cem_num_iters: 5

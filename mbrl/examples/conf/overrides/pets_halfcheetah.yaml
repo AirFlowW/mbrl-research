@@ -3,8 +3,9 @@ env: "pets_halfcheetah"
 term_fn: "no_termination"
 obs_process_fn: mbrl.env.pets_halfcheetah.HalfCheetahEnv.preprocess_fn
 learned_rewards: false
-num_steps: 300000
+num_steps: 150000
 trial_length: 1000
+freq_log_model: 15000
 
 num_elites: 5
 model_lr: 0.00028

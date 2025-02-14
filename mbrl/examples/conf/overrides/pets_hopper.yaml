@@ -2,7 +2,7 @@
 env: "gym___Hopper-v4"
 term_fn: "hopper"
 learned_rewards: true
-num_steps: 27500
+num_steps: 20000
 trial_length: 1000
 freq_log_model: 5500
 
@@ -11,9 +11,9 @@ model_lr: 2e-4
 model_wd: 3e-5
 model_batch_size: 32
 validation_ratio: 0
-freq_train_model: 250
+freq_train_model: 216
 patience: 25
-num_epochs_train_model: 25
+num_epochs_train_model: 28
 
 planning_horizon: 30
 cem_num_iters: 5
