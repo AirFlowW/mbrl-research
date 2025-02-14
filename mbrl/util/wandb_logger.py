@@ -36,6 +36,8 @@ class WANDBLogger(Logger):
     def log_data(self, group_name: str, data: Mapping[str, LogTypes]):
         super().log_data(group_name, data, dump=False)
         wb_data = {f"{group_name}/{key}": value for key, value in data.items()}
+        if "model_train/train_time" in wb_data.keys() and wb_data["model_train/train_time"] == 0:
+            del wb_data["model_train/train_time"]
         wandb.log(wb_data)
 
     def log_uncertainty(self, uncertainty, key):
