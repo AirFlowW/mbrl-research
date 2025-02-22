@@ -417,6 +417,12 @@ def train_model_and_save_model_and_data(
     )
     if hasattr(model, "update_normalizer"):
         model.update_normalizer(replay_buffer.get_all())
+
+    # update regularization weight for VBLL models
+    if mbrl.util.checks.is_VBLL_dynamics_model(model):
+        for member in model.model.members:
+            member.update_regularization_weight_from_dataset_length(dataset_train.num_stored)
+            
     model_trainer.train(
         dataset_train,
         dataset_val=dataset_val,

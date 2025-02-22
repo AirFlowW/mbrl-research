@@ -128,14 +128,7 @@ def train(
         steps_trial = 0
         while not terminated and not truncated:
             # --------------- Model Training -----------------
-            if env_steps % cfg.algorithm.freq_train_model == 0:
-                # update regularization weight for VBLL models
-                if is_vbll_dynamics_model:
-                    val_size = int(replay_buffer.num_stored * cfg.overrides.validation_ratio)
-                    train_size = replay_buffer.num_stored - val_size
-                    for member in dynamics_model.model.members:
-                        member.update_regularization_weight_from_dataset_length(train_size)
-                        
+            if env_steps % cfg.algorithm.freq_train_model == 0:                        
                 mbrl.util.common.train_model_and_save_model_and_data(
                     dynamics_model,
                     model_trainer,
