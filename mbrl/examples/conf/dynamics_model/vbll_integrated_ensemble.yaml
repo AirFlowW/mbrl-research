@@ -4,7 +4,7 @@ ensemble_size: 3
 device: ${device}
 propagation_method: random_model
 clip_val: 
-no_thompson_heads: 75 # if 0, then no thompson sampling, if > 0, then thompson sampling with that many heads
+no_thompson_heads: 60 # if 0, then no thompson sampling, if > 0, then thompson sampling with that many heads
 
 member_cfg:
   _target_: mbrl.models.VBLLMLP
@@ -25,3 +25,4 @@ member_cfg:
   cov_rank: 1 
   prior_scale: 5.2
   wishart_scale: 0.45
+  init_noise_logdiag: "zeros"
