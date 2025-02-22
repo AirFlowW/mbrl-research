@@ -72,6 +72,13 @@ class ModelTrainer:
                     color="blue",
                     dump_frequency=1,
                 )
+            else:
+                self.logger.register_group(
+                    constants.TRAIN_EXTENSION_LOG_GROUP_NAME,
+                    constants.TRAIN_EXTENSION_LOG_FORMAT,
+                    color="blue",
+                    dump_frequency=1,
+                )
         param_list = [
             # All parameters except the VBLL.Regression layer get the specified weight decay
             {'params': [param for name, param in model.named_parameters() if 'out_layer' not in name], 'weight_decay': weight_decay},
@@ -163,6 +170,7 @@ class ModelTrainer:
         disable_tqdm = silent or (num_epochs is None or num_epochs > 1)
         eval_meta_list = []
 
+        early_stopping = False
         start_time = time.time()
         for epoch in epoch_iter:
             if batch_callback:
@@ -198,8 +206,11 @@ class ModelTrainer:
                     epochs_since_update += 1
                 model_val_score = eval_score.mean()
 
+            if patience and epochs_since_update >= patience:
+                early_stopping = True
+
             if self.logger and not silent:
-                if num_epochs and num_epochs - 1 == epoch:
+                if early_stopping or (num_epochs and num_epochs - 1 == epoch):
                     train_time = time.time() - start_time
                 else:
                     train_time = 0
@@ -231,7 +242,7 @@ class ModelTrainer:
                     best_val_score,
                 )
 
-            if patience and epochs_since_update >= patience:
+            if early_stopping:
                 break
         
         self.train_time += train_time
@@ -239,25 +250,36 @@ class ModelTrainer:
         # saving the best models:
         if evaluate:
             self._maybe_set_best_weights_and_elite(best_weights, best_val_score)
-        if self.logger and self.is_vbll_dynamics_model:
-            VBLL_val_loss_tensor = torch.tensor([entry['VBLL_val_loss'] for entry in eval_meta_list])
-            NLL_tensor = torch.tensor([entry['NLL'] for entry in eval_meta_list])
-            MSE_tensor = torch.tensor([entry['MSE'] for entry in eval_meta_list])
-            VBLL_train_loss_tensor = torch.tensor([entry['VBLL_train_loss'] for entry in eval_meta_list])
-            self.logger.log_data(
-                self._LOG_GROUP_NAME_VBLL_EXTENSION,
-                {
-                    "train_iteration": self._train_iteration,
-                    "model_avg_val_MSE_score": torch.mean(MSE_tensor).item(),
-                    "model_best_val_MSE_score": torch.min(MSE_tensor).item(),
-                    "model_avg_val_nll_score": torch.mean(NLL_tensor).item(),
-                    "model_best_val_nll_score": torch.min(NLL_tensor).item(),
-                    "model_avg_val_vbll_score": torch.mean(VBLL_val_loss_tensor).item(),
-                    "model_best_val_vbll_score": torch.min(VBLL_val_loss_tensor).item(),
-                    "model_avg_vbll_train_loss_score": VBLL_train_loss_tensor.mean().item(),
-                    "model_best_vbll_train_loss_score":  VBLL_train_loss_tensor.min().item(),
-                },
-            )
+        if self.logger:
+            if self.is_vbll_dynamics_model:
+                VBLL_val_loss_tensor = torch.tensor([entry['VBLL_val_loss'] for entry in eval_meta_list])
+                NLL_tensor = torch.tensor([entry['NLL'] for entry in eval_meta_list])
+                MSE_tensor = torch.tensor([entry['MSE'] for entry in eval_meta_list])
+                VBLL_train_loss_tensor = torch.tensor([entry['VBLL_train_loss'] for entry in eval_meta_list])
+                self.logger.log_data(
+                    self._LOG_GROUP_NAME_VBLL_EXTENSION,
+                    {
+                        "train_iteration": self._train_iteration,
+                        "model_avg_val_MSE_score": torch.mean(MSE_tensor).item(),
+                        "model_best_val_MSE_score": torch.min(MSE_tensor).item(),
+                        "model_avg_val_nll_score": torch.mean(NLL_tensor).item(),
+                        "model_best_val_nll_score": torch.min(NLL_tensor).item(),
+                        "model_avg_val_vbll_score": torch.mean(VBLL_val_loss_tensor).item(),
+                        "model_best_val_vbll_score": torch.min(VBLL_val_loss_tensor).item(),
+                        "model_avg_vbll_train_loss_score": VBLL_train_loss_tensor.mean().item(),
+                        "model_best_vbll_train_loss_score":  VBLL_train_loss_tensor.min().item(),
+                    },
+                )
+            else:
+                NLL_tensor = torch.stack([entry['NLL'] for entry in eval_meta_list])
+                self.logger.log_data(
+                    constants.TRAIN_EXTENSION_LOG_GROUP_NAME,
+                    {
+                        "train_iteration": self._train_iteration,
+                        "model_best_val_nll_score": torch.min(NLL_tensor).item(),
+                        "model_avg_val_nll_score": torch.mean(NLL_tensor).item(),
+                    },
+                )
 
         self._train_iteration += 1
         return training_losses, val_scores
@@ -327,17 +349,20 @@ class ModelTrainer:
         sum_meta = {}
         no_batches = 0
         batch_scores_list = []
+        meta_list = []
         for batch in dataset:
             batch_score, meta = self.model.eval_score(batch)
             no_batches += 1
-            sum_meta = {
-                model_name: {
-                    key: sum_meta.get(model_name, {}).get(key, 0) + meta.get(model_name, {}).get(key, 0)
-                    for key in set(sum_meta.get(model_name, {})) | set(meta.get(model_name, {}))
+            if self.is_vbll_dynamics_model:
+                sum_meta = {
+                    model_name: {
+                        key: sum_meta.get(model_name, {}).get(key, 0) + meta.get(model_name, {}).get(key, 0)
+                        for key in set(sum_meta.get(model_name, {})) | set(meta.get(model_name, {}))
+                    }
+                    for model_name in set(meta)
                 }
-                for model_name in set(meta)
-            }
             batch_scores_list.append(batch_score)
+            meta_list.append(meta)
             if batch_callback:
                 batch_callback(batch_score.mean(), meta, "eval")
         try:
@@ -355,13 +380,15 @@ class ModelTrainer:
 
         mean_axis = 1 if batch_scores.ndim == 2 else (1, 2)
         batch_scores = batch_scores.mean(dim=mean_axis)
-        
-        meta = {model: {key: value / no_batches for key, value in metrics.items()} for model, metrics in sum_meta.items()}
-        meta_average_across_models = {
-            key: sum(model_metrics.get(key, 0) for model_metrics in meta.values()) / len(meta)
-            for key in {k for metrics in meta.values() for k in metrics}
-        }
-        return batch_scores, meta_average_across_models
+        if self.is_vbll_dynamics_model:    
+            meta = {model: {key: value / no_batches for key, value in metrics.items()} for model, metrics in sum_meta.items()}
+            meta = {
+                key: sum(model_metrics.get(key, 0) for model_metrics in meta.values()) / len(meta)
+                for key in {k for metrics in meta.values() for k in metrics}
+            }
+        else:
+            meta = {key: torch.stack([meta_i[key] for meta_i in meta_list]) for key in meta.keys()}
+        return batch_scores, meta
 
     def maybe_get_best_weights(
         self,

@@ -358,7 +358,8 @@ class GaussianMLP(Ensemble):
         with torch.no_grad():
             pred_mean, pred_logvar = self.forward(model_in, use_propagation=False)
             target = target.repeat((self.num_members, 1, 1))
-            meta = {}
+            nll = mbrl.util.math.gaussian_nll(pred_mean, pred_logvar, target, reduce=False)
+            meta = {"NLL": nll.mean()}
 
             if uncertainty:
                 var = torch.exp(pred_logvar)

@@ -61,3 +61,10 @@ MODEL_LOG_FORMAT_VBLL_EXTENSION = [
     ("model_avg_vbll_train_loss_score", "AVGVBLLTRAINLOSS", "float"),
     ("model_best_vbll_train_loss_score", "BESTVBLLTRAINLOSS", "float"),
 ]
+
+TRAIN_EXTENSION_LOG_GROUP_NAME = "model_train_validation_extension"
+TRAIN_EXTENSION_LOG_FORMAT = [
+    ("train_iteration", "I", "int"),
+    ("model_avg_val_nll_score", "AVGNLLSCORE", "float"),
+    ("model_best_val_nll_score", "BESTNLLSCORE", "float"),
+]
