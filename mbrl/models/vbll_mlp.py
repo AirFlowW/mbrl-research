@@ -64,6 +64,7 @@ class VBLLMLP(Model):
         cov_rank: Optional[int] = None,
         prior_scale: float = 1.,
         wishart_scale: float = .1,
+        init_noise_logdiag: str = "random"
     ):
         super().__init__(device=device)
         self.deterministic = deterministic
@@ -93,7 +94,7 @@ class VBLLMLP(Model):
 
         # define output layer
         self.out_layer = vbll.Regression(feature_dim, out_size, regularization_weight=regularization_weight_factor, parameterization=parameterization, 
-            cov_rank=cov_rank, prior_scale = prior_scale, wishart_scale = wishart_scale)
+            cov_rank=cov_rank, prior_scale = prior_scale, wishart_scale = wishart_scale, init_noise_logdiag=init_noise_logdiag)
 
         self.apply(truncated_normal_init)
         self.to(self.device)
