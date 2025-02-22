@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
+import time
 from typing import Optional, Sequence, cast
 
 import gymnasium as gym
@@ -17,16 +18,17 @@ import mbrl.planning
 import mbrl.third_party.pytorch_sac_pranz24 as pytorch_sac_pranz24
 import mbrl.types
 import mbrl.util
+from mbrl.util import time_keeping
 import mbrl.util.common
 import mbrl.util.math
 from mbrl.planning.sac_wrapper import SACAgent
 from mbrl.third_party.pytorch_sac import VideoRecorder
 
+MBPO_RESULTS_LOG_NAME = 'mbpo_eval'
 MBPO_LOG_FORMAT = mbrl.constants.EVAL_LOG_FORMAT + [
     ("epoch", "E", "int"),
     ("rollout_length", "RL", "int"),
 ]
-
 
 def rollout_model_and_populate_sac_buffer(
     model_env: mbrl.models.ModelEnv,
@@ -120,9 +122,20 @@ def train(
     cfg: omegaconf.DictConfig,
     silent: bool = False,
     work_dir: Optional[str] = None,
+    reward_fn: mbrl.types.RewardFnType = None,
 ) -> np.float32:
     # ------------------- Initialization -------------------
+    start_overall_runtime = time.time()
     debug_mode = cfg.get("debug_mode", False)
+
+    # to not run into half initialized configs that are not used anyway
+    omegaconf.OmegaConf.set_struct(cfg, False)
+    del cfg["action_optimizer"]
+    omegaconf.OmegaConf.set_struct(cfg, True)
+
+    is_vbll_dynamics_model = mbrl.util.checks.is_VBLL_dynamics_model(cfg)
+    if is_vbll_dynamics_model:
+        recursive_updates_list = None
 
     obs_shape = env.observation_space.shape
     act_shape = env.action_space.shape
@@ -134,13 +147,30 @@ def train(
 
     work_dir = work_dir or os.getcwd()
     # enable_back_compatible to use pytorch_sac agent
-    logger = mbrl.util.Logger(work_dir, enable_back_compatible=True)
+    if cfg.logger == "wandb":
+        logger = mbrl.util.WANDBLogger(work_dir, cfg=cfg, enable_back_compatible=True)
+    else:
+        logger = mbrl.util.Logger(work_dir, enable_back_compatible=True)
     logger.register_group(
-        mbrl.constants.RESULTS_LOG_NAME,
+        MBPO_RESULTS_LOG_NAME,
         MBPO_LOG_FORMAT,
         color="green",
         dump_frequency=1,
     )
+    logger.register_group(
+        mbrl.constants.RESULTS_LOG_NAME, mbrl.constants.EVAL_LOG_FORMAT, color="green"
+    )
+    logger.register_group(
+        mbrl.constants.OVERALL_LOG_NAME, mbrl.constants.OVERALL_LOG_FORMAT , color="green"
+    )
+    logger.register_group(
+        mbrl.constants.STEP_LOG_NAME, mbrl.constants.STEP_LOG_FORMAT, color="yellow"
+    )
+    if is_vbll_dynamics_model:
+        logger.register_group(
+            mbrl.constants.VBLL_LOG_NAME, mbrl.constants.VBLL_LOG_FORMAT, color="yellow"
+        )
+
     save_video = cfg.get("save_video", False)
     video_recorder = VideoRecorder(work_dir if save_video else None)
 
@@ -170,6 +200,7 @@ def train(
         {} if random_explore else {"sample": True, "batched": False},
         replay_buffer=replay_buffer,
     )
+    env_data_for_analysis = {"last_data": replay_buffer.get_last_n_samples(n=cfg.algorithm.initial_exploration_steps)}
 
     # ---------------------------------------------------------
     # --------------------- Training Loop ---------------------
@@ -182,7 +213,7 @@ def train(
     updates_made = 0
     env_steps = 0
     model_env = mbrl.models.ModelEnv(
-        env, dynamics_model, termination_fn, None, generator=torch_generator
+        env, dynamics_model, termination_fn, reward_fn, generator=torch_generator
     )
     model_trainer = mbrl.models.ModelTrainer(
         dynamics_model,
@@ -193,6 +224,7 @@ def train(
     best_eval_reward = -np.inf
     epoch = 0
     sac_buffer = None
+    current_trial = 1
     while env_steps < cfg.overrides.num_steps:
         rollout_length = int(
             mbrl.util.math.truncated_linear(
@@ -204,15 +236,51 @@ def train(
         sac_buffer = maybe_replace_sac_buffer(
             sac_buffer, obs_shape, act_shape, sac_buffer_capacity, cfg.seed
         )
-        obs = None
+
+        steps_epoch = 0
+        episode_reward = 0
+        episode_length = 0
+        obs, _ = env.reset()
         terminated = False
         truncated = False
-        for steps_epoch in range(cfg.overrides.epoch_length):
-            if steps_epoch == 0 or terminated or truncated:
-                steps_epoch = 0
+        while True:
+        # for steps_epoch in range(cfg.overrides.epoch_length): nicht ienfach for sondern man muss die episode noch zuende bringen?
+            if terminated or truncated:
+                logger.log_data(
+                    mbrl.constants.RESULTS_LOG_NAME,
+                    {"episode":current_trial, "env_step": env_steps, "episode_reward": episode_reward, "episode_length": episode_length},
+                )
+                current_trial += 1
+                episode_reward = 0
+                episode_length = 0
                 obs, _ = env.reset()
                 terminated = False
                 truncated = False
+
+                if (env_steps >= cfg.overrides.num_steps or steps_epoch >= cfg.overrides.epoch_length):
+                    # ------ Epoch ended (evaluate and save model) ------
+                    avg_reward = evaluate(
+                        test_env, agent, cfg.algorithm.num_eval_episodes, video_recorder
+                    )
+                    logger.log_data(
+                        MBPO_RESULTS_LOG_NAME,
+                        {
+                            "epoch": epoch,
+                            "episode": current_trial,
+                            "env_step": env_steps,
+                            "episode_reward": avg_reward,
+                            "episode_length": episode_length,
+                            "rollout_length": rollout_length,
+                        },
+                    )
+                    if avg_reward > best_eval_reward:
+                        video_recorder.save(f"{epoch}.mp4")
+                        best_eval_reward = avg_reward
+                        agent.sac_agent.save_checkpoint(
+                            ckpt_path=os.path.join(work_dir, "sac.pth")
+                        )
+                    epoch += 1
+                    break
             # --- Doing env step and adding to model dataset ---
             (
                 next_obs,
@@ -234,6 +302,13 @@ def train(
                     work_dir=work_dir,
                 )
 
+                # --------- track the uncertainty of the model
+                if cfg.logger == "wandb":
+                    env_data_for_analysis["last_data"] = replay_buffer.get_last_n_samples(n=cfg.algorithm.initial_exploration_steps)
+                    for key, batch in env_data_for_analysis.items():
+                        _, meta = dynamics_model.eval_score(batch, uncertainty=True)
+                        logger.log_uncertainty(meta["uncertainty"], key)
+
                 # --------- Rollout new model and store imagined trajectories --------
                 # Batch all rollouts for the next freq_train_model steps together
                 rollout_model_and_populate_sac_buffer(
@@ -254,6 +329,20 @@ def train(
                         f"Steps: {env_steps}"
                     )
 
+            # update vbll model recursively
+            elif cfg.overrides.get("recursive_update", 0) > 0 and is_vbll_dynamics_model and \
+                    env_steps % cfg.overrides.get("no_recursive_update_data", 5) == 0:
+                recursive_updates_list = model_trainer.train_vbll_recursively(
+                    cfg, replay_buffer.get_last_n_samples(cfg.overrides.get("no_recursive_update_data", 5)),
+                    replay_buffer.sample(cfg.overrides.get("no_recursive_update_eval_data", 2500)),
+                    mode = cfg.overrides.get("recursive_update", 0)
+                    )
+                
+            # save model to wandb
+            freq_log_model = cfg.overrides.get("freq_log_model", False)
+            if freq_log_model and (env_steps+1) % freq_log_model == 0 and cfg.logger == "wandb":
+                logger.upload_model(cfg.overrides.env, dynamics_model, env_steps+1)
+                
             # --------------- Agent Training -----------------
             for _ in range(cfg.overrides.num_sac_updates_per_step):
                 use_real_data = rng.random() < cfg.algorithm.real_data_ratio
@@ -274,28 +363,25 @@ def train(
                 if not silent and updates_made % cfg.log_frequency_agent == 0:
                     logger.dump(updates_made, save=True)
 
-            # ------ Epoch ended (evaluate and save model) ------
-            if (env_steps + 1) % cfg.overrides.epoch_length == 0:
-                avg_reward = evaluate(
-                    test_env, agent, cfg.algorithm.num_eval_episodes, video_recorder
-                )
-                logger.log_data(
-                    mbrl.constants.RESULTS_LOG_NAME,
-                    {
-                        "epoch": epoch,
-                        "env_step": env_steps,
-                        "episode_reward": avg_reward,
-                        "rollout_length": rollout_length,
-                    },
-                )
-                if avg_reward > best_eval_reward:
-                    video_recorder.save(f"{epoch}.mp4")
-                    best_eval_reward = avg_reward
-                    agent.sac_agent.save_checkpoint(
-                        ckpt_path=os.path.join(work_dir, "sac.pth")
-                    )
-                epoch += 1
-
             env_steps += 1
+            steps_epoch += 1
+            episode_reward += reward
+            episode_length += 1
             obs = next_obs
+            if logger is not None:
+                logger.log_data(
+                    mbrl.constants.STEP_LOG_NAME,
+                    {"env_step": env_steps, "planning_time": time_keeping.last_planning_time, "step_reward": reward},
+                )
+                if is_vbll_dynamics_model:
+                    avg_recursive_update = np.mean(recursive_updates_list) if recursive_updates_list is not None and len(recursive_updates_list) > 0 else 0
+                    logger.log_data(
+                        mbrl.constants.VBLL_LOG_NAME,
+                        {"avg_no_recursive_updates": avg_recursive_update},
+                    )
+                    recursive_updates_list = None
+    logger.log_data(
+        mbrl.constants.OVERALL_LOG_NAME,
+        {"planning_time":time_keeping.accumulated_planning_time, "train_time": model_trainer.train_time, "recursive_train_time":model_trainer.recursive_train_time, "overall_time": time.time() - start_overall_runtime},
+    )
     return np.float32(best_eval_reward)
