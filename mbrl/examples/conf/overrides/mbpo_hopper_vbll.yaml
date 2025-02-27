@@ -4,6 +4,10 @@ term_fn: "hopper"
 
 freq_log_model: 3000
 
+recursive_update: 0 # 0 -> no recursive updates, 1 -> recursive updates always with recursive_num_epochs (in member_cfg) epochs, 2 -> recursive_num_epochs as upper limit but finds no of epochs automatically
+no_recursive_update_data: 5 # (int) number of data points to use for recursive updates.
+no_recursive_update_eval_data: 2500
+
 num_steps: 30000
 epoch_length: 1000
 num_elites: 5
