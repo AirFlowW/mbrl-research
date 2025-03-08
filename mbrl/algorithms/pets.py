@@ -169,7 +169,8 @@ def train(
                 recursive_updates_list = model_trainer.train_vbll_recursively(
                     cfg, replay_buffer.get_last_n_samples(cfg.overrides.get("no_recursive_update_data", 5)),
                     replay_buffer.sample(cfg.overrides.get("no_recursive_update_eval_data", 2500)),
-                    mode = cfg.overrides.get("recursive_update", 0)
+                    mode= cfg.overrides.get("recursive_update", 0),
+                    old_data=replay_buffer.sample(cfg.overrides.get("no_recursive_update_old_data", 0))
                     )
 
             if env_steps % cfg.overrides.get("track_uncertainty_freq", 250) == 1 and cfg.logger == "wandb":    

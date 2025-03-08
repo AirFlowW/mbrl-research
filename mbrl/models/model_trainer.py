@@ -284,7 +284,7 @@ class ModelTrainer:
         self._train_iteration += 1
         return training_losses, val_scores
     
-    def train_vbll_recursively(self, cfg, update_transition_batch, eval_transition_batch, mode=2):
+    def train_vbll_recursively(self, cfg, update_transition_batch, eval_transition_batch, mode=2, old_data=None):
         """Trains the model recursively for a given number of epochs.
 
         :param cfg: configuration object (highest level)
@@ -301,6 +301,9 @@ class ModelTrainer:
         
         if checks.is_thompson_sampling_active(cfg):
             self.model.model.reset_thompson_mlps()
+        
+        if old_data is not None and len(old_data) > 0:
+            update_transition_batch.add_transition_batch(old_data)
         
         start_time = time.time()
         recursive_updates_list = np.array([])
