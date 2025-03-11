@@ -36,6 +36,7 @@ def train(
     debug_mode = cfg.get("debug_mode", False)
     is_vbll_dynamics_model = mbrl.util.checks.is_VBLL_dynamics_model(cfg)
     is_thompson_sampling_enabled = mbrl.util.checks.is_thompson_sampling_active(cfg)
+    deterministic_thompson_sampling = cfg.overrides.get("deterministic_thompson_sampling", True)
 
     # model specific context
     if is_vbll_dynamics_model:
@@ -143,7 +144,7 @@ def train(
 
             # --- Doing env step using the agent and adding to model dataset ---
             if is_thompson_sampling_enabled:
-                dynamics_model.model.set_thompson_sampling_active()
+                dynamics_model.model.set_thompson_sampling_active(deterministic=deterministic_thompson_sampling)
                 
             (
                 next_obs,

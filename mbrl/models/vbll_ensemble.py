@@ -1,4 +1,5 @@
 from enum import Enum
+import math
 from typing import Any, Dict, Optional, Tuple, Union
 
 import hydra
@@ -61,8 +62,8 @@ class VBLLEnsemble(BasicEnsemble):
         else:
             raise ValueError(f"Mode {mode} not recognized.")
         
-    def set_thompson_sampling_active(self):
-        self.deterministic = True
+    def set_thompson_sampling_active(self, deterministic):
+        self.deterministic = deterministic
         self.mode = Mode.THOMPSON_FORWARD
 
     def set_thompson_sampling_inactive(self):
@@ -138,16 +139,19 @@ class VBLLEnsemble(BasicEnsemble):
     
     def _create_thompson_heads(self, no_thompson_heads=10):
         thompson_head_weights = []
+        log_aleatoric_uncertainties = []
         for member in self.members:
             if no_thompson_heads == 1:
                 thompson_head_weights.append(member.out_layer.create_mean_thompson_head())
             else:
                 thompson_head_weights.append(member.out_layer.create_thompson_heads(no_thompson_heads))
+            # for stochastic thompson sampling
+            log_aleatoric_uncertainties.append(torch.log(member.out_layer.noise().var))
         
         flattened_tensors = [torch.transpose(tensor, 0, 1) for sublist in thompson_head_weights for tensor in sublist]
         thompson_heads = torch.stack(flattened_tensors, dim=0)
         thompson_heads = EnsembleLinearLayer(self.ensemble_size*no_thompson_heads, thompson_heads.shape[1], thompson_heads.shape[2], bias=False, weights=thompson_heads)
-        return thompson_heads
+        return thompson_heads, log_aleatoric_uncertainties
 
     def _fast_thompson_forward(  # type: ignore
         self,
@@ -187,12 +191,13 @@ class VBLLEnsemble(BasicEnsemble):
         """
         if self.mlp_feature_extractors is None:
             self.mlp_feature_extractors = self._create_ensemble_mlp_feature_extractors()
-            self.thompson_heads = self._create_thompson_heads(no_thompson_heads=self.no_thompson_heads)
+            self.thompson_heads, self.aleatoric_logvars = self._create_thompson_heads(no_thompson_heads=self.no_thompson_heads)
 
         if self.propagation_method == "random_model":
 
             x = x.unsqueeze(0)
-            model_indices_features = torch.randperm(x.shape[1], device=self.device)
+            no_of_states = x.shape[1]
+            model_indices_features = torch.randperm(no_of_states, device=self.device)
             out = self._forward_from_indices_ensemble_linear_layer(
                 x, model_indices_features, self.mlp_feature_extractors, False
             )
@@ -204,7 +209,13 @@ class VBLLEnsemble(BasicEnsemble):
             mean = mean.view(x.shape[1], -1)
             # invert shuffle
             mean[model_indices_features] = mean.clone()
-            return mean, None
+
+            logvar = None            
+            if not self.deterministic:
+                logvar  = expand_logvars(self.aleatoric_logvars,no_of_states)
+                logvar = logvar[model_indices_features]
+
+            return mean, logvar
 
         elif self.propagation_method == "all_thompson_heads":
             x = x.unsqueeze(0)
@@ -326,3 +337,20 @@ class VBLLEnsemble(BasicEnsemble):
         meta["uncertainty"] = uncertainty
 
         return loss, meta
+
+def expand_logvars(logvar_tensor_list, size_of_wanted_tensor):
+    """
+    takes logvar list of the ensemble and makes tensor of size size_of_wanted_tensor out of it by duplicating the list items
+    """
+    m = len(logvar_tensor_list)
+    s_prime = math.ceil(size_of_wanted_tensor / m) * m
+    repeats = s_prime // m
+
+    expanded_tensors = []
+    for i, tensor in enumerate(logvar_tensor_list):
+        if i < m - 1:
+            r = repeats
+        else:
+            r = repeats - (s_prime - size_of_wanted_tensor)
+        expanded_tensors.append(tensor.unsqueeze(0).expand(r, -1))
+    return torch.cat(expanded_tensors, dim=0)
