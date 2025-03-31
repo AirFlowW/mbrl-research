@@ -1,6 +1,6 @@
 # @package _group_
 env: "env_with_measurement_noise"
-noise_var: 0.1
+noise_var: 0.00001
 
 underlying_env: "gym___Hopper-v4"
 term_fn: "hopper"
