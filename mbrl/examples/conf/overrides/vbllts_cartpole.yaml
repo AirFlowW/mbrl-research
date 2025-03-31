@@ -5,9 +5,11 @@ trial_length: 200
 num_steps: 5000
 freq_log_model: 500
 
+deterministic_thompson_sampling: false
 recursive_update: 0 # 0 -> no recursive updates, 1 -> recursive updates always with recursive_num_epochs (in member_cfg) epochs, 2 -> recursive_num_epochs as upper limit but finds no of epochs automatically
 no_recursive_update_data: 5 # (int) number of data points to use for recursive updates.
-no_recursive_update_eval_data: 2500
+no_recursive_update_eval_data: 20
+no_recursive_update_old_data: 0
 
 num_elites: 5
 model_lr: 7.5e-4
