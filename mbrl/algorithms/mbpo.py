@@ -244,7 +244,6 @@ def train(
         terminated = False
         truncated = False
         while True:
-        # for steps_epoch in range(cfg.overrides.epoch_length): nicht ienfach for sondern man muss die episode noch zuende bringen?
             if terminated or truncated:
                 logger.log_data(
                     mbrl.constants.RESULTS_LOG_NAME,

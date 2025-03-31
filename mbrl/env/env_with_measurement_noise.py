@@ -32,7 +32,6 @@ class EnvWithMeasurementNoise(gym.Env):
         
 def add_noise_to_state(state: np.array, std_dev):
     noise_samples = np.random.normal(loc=0, scale=std_dev, size=state.shape)
-    # currently only supporting hopper and there those dims should be excluded
-    noise_samples[3:5] = 0
+    noise_samples[3:5] = 0 # this adaption is for hopper - there those dims should be excluded
     noisy_state = noise_samples + state
     return noisy_state

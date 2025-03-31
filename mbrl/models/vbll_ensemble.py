@@ -14,6 +14,19 @@ class Mode(Enum):
     THOMPSON_FORWARD = 1
 
 class VBLLEnsemble(BasicEnsemble):
+    """Implements an ensemble of MLP models with Variational Bayesian Last Layers.
+
+    This model is based on the
+    2024 paper (VBLL) https://arxiv.org/abs/2404.11599v1
+
+    Args:
+        ensemble_size (int): number of member models in this ensemble.
+        device (Union[str, torch.device]): the device for computations.
+        member_cfg (omegaconf.DictConfig): configuration of the members.
+        propagation_method (Optional[str]): sets the mode how a state trajectory should be created (/propagated).
+        clip_val (Optional[float]): clips the gradients of the ensemble members.
+        no_thompson_heads (int): number of thompson heads to use for each member of the ensemble.
+    """
     def __init__(
         self,
         ensemble_size: int,
@@ -21,7 +34,7 @@ class VBLLEnsemble(BasicEnsemble):
         member_cfg: omegaconf.DictConfig,
         propagation_method: Optional[str] = None,
         clip_val: Optional[float] = None,
-        no_thompson_heads: int = 25
+        no_thompson_heads: int = 60
     ):
         super().__init__(
             ensemble_size=ensemble_size,
@@ -72,11 +85,10 @@ class VBLLEnsemble(BasicEnsemble):
 
     def _extract_linear_layers(self):
         """Extracts the linear layers from the ensemble members.
-        Args:
             
         Returns:
             (list of list of nn.Linear): list of linear layers for each ensemble member.
-            Dim: ``E x L``, where ``E`` is the ensemble size, and ``L`` is the number of layers per member.
+            Dim: ``E x L``, where ``E`` is the ensemble size, and ``L`` is the number of layers of each member.
         """
         linear_layers = []
         for member in self.members:
@@ -93,10 +105,9 @@ class VBLLEnsemble(BasicEnsemble):
     
     def _extract_weights_and_biases(self):
         """Extracts the weights and biases from the ensemble members.
-        Args:
 
         Returns:
-            (tuple of list of list of weights/biases): list of tuples for each ensemble member.
+            (tuple of list of list of weights/biases): tuple of lists (an element in this list for each layer) of weights/ biases of each ensemble member.
             Dim: ``2 x E x L x w/b``, where ``E`` is the ensemble size, ``L`` is the number of layers per member,
             this for the weight as well as biases of the layers.
         """
@@ -115,6 +126,12 @@ class VBLLEnsemble(BasicEnsemble):
         return weights_of_layers, biases_of_layers
     
     def _create_ensemble_mlp_feature_extractors(self):
+        """Creates a combined optimized feature extractor of this ensemble.
+        The feature extractor is build upon EnsembleLinearLayers of the layers of the feature extractors of the ensemble members.
+
+        Returns:
+            (nn.Sequential): the feature extractor of the ensemble.
+        """
         extracted_linear_layer_weights, extracted_linear_layer_biases = self._extract_weights_and_biases()
         linear_layers = []
         
@@ -138,6 +155,13 @@ class VBLLEnsemble(BasicEnsemble):
         return feature_extractor
     
     def _create_thompson_heads(self, no_thompson_heads=10):
+        """Creates the thompson heads for the ensemble.
+        
+        Args:
+            no_thompson_heads (int): number of thompson heads to create.
+        Returns:
+            (EnsembleLinearLayer, aleatoric uncertainties): tuple of the thompson heads of the ensemble and the log aleatoric uncertainty (/noise variance).
+        """
         thompson_head_weights = []
         log_aleatoric_uncertainties = []
         for member in self.members:
@@ -197,7 +221,7 @@ class VBLLEnsemble(BasicEnsemble):
 
             x = x.unsqueeze(0)
             no_of_states = x.shape[1]
-            model_indices_features = torch.randperm(no_of_states, device=self.device)
+            model_indices_features = propagation_indices if propagation_indices is not None else torch.randperm(no_of_states, generator=rng, device=self.device)
             out = self._forward_from_indices_ensemble_linear_layer(
                 x, model_indices_features, self.mlp_feature_extractors, False
             )

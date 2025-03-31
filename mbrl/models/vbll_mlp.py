@@ -46,6 +46,8 @@ class VBLLMLP(Model):
         cov_rank (int, optional): the rank of the covariance matrix.
         prior_scale (float): Scale of prior covariance matrix.
         wishart_scale (float): Scale of Wishart prior on noise covariance.
+        init_noise_logdiag (str): Set the initialization mode of the noise log variance.
+            Currently supports {'zeros', 'random'}.
     """
 
     def __init__(
@@ -188,6 +190,10 @@ class VBLLMLP(Model):
         self, model_in: torch.Tensor, target: Optional[torch.Tensor] = None, uncertainty = False
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Computes the negative log likelihood of the target given the input.
+        
+        :param uncertainty: False - normal eval score calculation. True - advanced uncertainty evaluation
+        
+        :return: Evaluation score and meta dict. The meta dict contains the advanced uncertainty evaluation.
         """
         with torch.no_grad():
             out = self._default_forward_out(model_in)
@@ -231,9 +237,11 @@ class VBLLMLP(Model):
             return VBLL_val_loss_non_reduced, meta
         
     def get_aleatoric_var(self):
+        """:return: aleatoric uncertainty"""
         return torch.exp(self.out_layer.noise_logdiag)
         
     def update_regularization_weight_from_dataset_length(self,dataset_length: int):
+        """Updates the regularization weight. Needs to be done before training."""
         self.out_layer.regularization_weight = self.regularization_weight_factor/dataset_length
 
     def save(self, save_dir: Union[str, pathlib.Path]):
